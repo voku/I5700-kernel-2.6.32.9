@@ -874,7 +874,7 @@ change_okay:
 }
 
 /*
- * Samma på svenska..
+ * Samma pÃ¥ svenska..
  */
 SYSCALL_DEFINE1(setfsgid, gid_t, gid)
 {
@@ -1110,8 +1110,12 @@ SYSCALL_DEFINE0(setsid)
 	err = session;
 out:
 	write_unlock_irq(&tasklist_lock);
-	if (err > 0)
+	if (err > 0) {
 		proc_sid_connector(group_leader);
+#ifdef CONFIG_SCHED_AUTOGROUP
+		sched_autogroup_create_attach(group_leader);
+#endif
+	}
 	return err;
 }
 
@@ -1655,3 +1659,4 @@ int orderly_poweroff(bool force)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(orderly_poweroff);
+

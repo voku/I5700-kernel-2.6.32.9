@@ -181,7 +181,8 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 export KBUILD_BUILDHOST := $(SUBARCH)
 ARCH			:= arm
-CROSS_COMPILE   := /opt/ctng/bin/arm-spica-linux-uclibcgnueabi-
+#CROSS_COMPILE   := /opt/ctng/bin/arm-spica-linux-uclibcgnueabi-
+CROSS_COMPILE  := /usr/bin/arm-linux-gnueabihf-
 #CROSS_COMPILE	:= $(shell if [ -f .cross_compile ]; then \
 					cat .cross_compile; \
 					fi)
@@ -225,8 +226,8 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 
 HOSTCC       = gcc
 HOSTCXX      = g++
-HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer
-HOSTCXXFLAGS = -O2
+HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -Ofast -fomit-frame-pointer
+HOSTCXXFLAGS = -Ofast
 
 # Decide whether to build built-in, modular, or both.
 # Normally, just do built-in.
@@ -327,13 +328,13 @@ CHECK		= sparse
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-MODFLAGS	= -DMODULE -O3 -marm -mfpu=vfp -mtune=arm1176jzf-s
+MODFLAGS    = -DMODULE -pipe -Ofast -marm -mfpu=vfp -mtune=arm1176jzf-s -march=armv6zk -mfloat-abi=hard -floop-interchange -floop-strip-mine -floop-block -ffast-math -funsafe-loop-optimizations
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
-LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
-CFLAGS_KERNEL	= -O3 -marm -mfpu=vfp -mtune=arm1176jzf-s
-AFLAGS_KERNEL	=
-CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
+LDFLAGS_MODULE  =
+CFLAGS_KERNEL   = -pipe -fno-tree-vectorize -Ofast -march=armv6zk -mtune=arm1176jzf-s -floop-interchange -floop-strip-mine -floop-block -ffast-math -fprefetch-loop-arrays -funsafe-loop-optimizations -mfloat-abi=hard --param l1-cache-size=16 --param l1-cache-line-size=32 -ftree-vectorize -fomit-frame-pointer -mcpu=arm1176jzf-s -mfpu=vfp -mthumb-interwork -DSP -DROLL
+AFLAGS_KERNEL   =
+CFLAGS_GCOV		= -fprofile-arcs -ftest-coverage
 
 
 # Use LINUXINCLUDE when you must reference the include/ directory.
@@ -527,7 +528,7 @@ all: vmlinux
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os
 else
-KBUILD_CFLAGS	+= -O2
+KBUILD_CFLAGS	+= -Ofast
 endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile

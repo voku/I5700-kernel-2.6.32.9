@@ -773,6 +773,8 @@ static long wb_writeback(struct bdi_writeback *wb,
 	}
 
 	for (;;) {
+		long to_write = 0;
+
 		/*
 		 * Stop writeback when nr_pages has been consumed
 		 */
@@ -786,13 +788,18 @@ static long wb_writeback(struct bdi_writeback *wb,
 		if (args->for_background && !over_bground_thresh())
 			break;
 
+		if (args->sync_mode == WB_SYNC_ALL)
+			to_write = args->nr_pages;
+		if (!to_write)
+			to_write = MAX_WRITEBACK_PAGES;
+
 		wbc.more_io = 0;
 		wbc.encountered_congestion = 0;
-		wbc.nr_to_write = MAX_WRITEBACK_PAGES;
+		wbc.nr_to_write = to_write;
 		wbc.pages_skipped = 0;
 		writeback_inodes_wb(wb, &wbc);
-		args->nr_pages -= MAX_WRITEBACK_PAGES - wbc.nr_to_write;
-		wrote += MAX_WRITEBACK_PAGES - wbc.nr_to_write;
+		args->nr_pages -= to_write - wbc.nr_to_write;
+		wrote += to_write - wbc.nr_to_write;
 
 		/*
 		 * If we consumed everything, see if we have more
@@ -807,7 +814,7 @@ static long wb_writeback(struct bdi_writeback *wb,
 		/*
 		 * Did we write something? Try for more
 		 */
-		if (wbc.nr_to_write < MAX_WRITEBACK_PAGES)
+		if (wbc.nr_to_write < to_write)
 			continue;
 		/*
 		 * Nothing written. Wait for some inode to
@@ -1211,6 +1218,23 @@ void writeback_inodes_sb(struct super_block *sb)
 	bdi_start_writeback(sb->s_bdi, sb, nr_to_write);
 }
 EXPORT_SYMBOL(writeback_inodes_sb);
+
+/**
+ * writeback_inodes_sb_if_idle	-	start writeback if none underway
+ * @sb: the superblock
+ *
+ * Invoke writeback_inodes_sb if no writeback is currently underway.
+ * Returns 1 if writeback was started, 0 if not.
+ */
+int writeback_inodes_sb_if_idle(struct super_block *sb)
+{
+	if (!writeback_in_progress(sb->s_bdi)) {
+		writeback_inodes_sb(sb);
+		return 1;
+	} else
+		return 0;
+}
+EXPORT_SYMBOL(writeback_inodes_sb_if_idle);
 
 /**
  * sync_inodes_sb	-	sync sb inode pages

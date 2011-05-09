@@ -696,7 +696,7 @@ dhd_register_hwakeup(void)
 
 	printk("dhd_register_hwakeup : set_irq_type\n");
 //	set_irq_type(dhd_wifi_sleep->host_wake_irq, IRQ_TYPE_EDGE_BOTH);
-	set_irq_type(dhd_wifi_sleep->host_wake_irq, IRQ_TYPE_EDGE_FALLING);
+//	set_irq_type(dhd_wifi_sleep->host_wake_irq, IRQ_TYPE_EDGE_FALLING);
 
 #ifdef BCMHOSTWAKE_IRQ
         dhd_mmc_suspend_ctrl.wifiirq = dhd_wifi_sleep->host_wake_irq;

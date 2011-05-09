@@ -2,7 +2,7 @@
 
 #Set CPU Environment Variable
 if [ "$CPU_JOB_NUM" = "" ] ; then
-        CPU_JOB_NUM=8
+        CPU_JOB_NUM=4
 fi
 
 Usage()
@@ -15,12 +15,12 @@ exit 1
 }
 
 OPTION=-k
-#PRODUCT=r880
-PRODUCT=$1
+PRODUCT=r880tom3q
+#PRODUCT=$1
 
 case "$PRODUCT" in
 	r880*)
-		MODULES="multipdp dpram vibetonz dpram_recovery"
+		MODULES="ibtgpio camera cmm dpram dpram_recovery g2d g3d jpeg mfc multipdp param pp rotator vibetonz"
 
 		case "$PRODUCT" in
 			r880)

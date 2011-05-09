@@ -24,7 +24,7 @@ loglevel 3
     symlink /sys/kernel/debug /d
 
 # Kernel version
-    setprop ro.build.display.id "Gotenks Krnl-2.6.32.9 v1.0"
+    setprop ro.build.display.id "VOKU-kernel 2.6.32.9 v0.2"
 
 # insert modules
     insmod /lib/modules/xsr.ko
@@ -80,11 +80,11 @@ loglevel 3
     write /proc/sys/kernel/hung_task_timeout_secs 0
     write /proc/cpu/alignment 4
     write /proc/sys/kernel/sched_latency_ns 10000000
-    write /proc/sys/kernel/sched_min_granularity_ns 4000000
-    write /proc/sys/kernel/sched_wakeup_granularity_ns 4000000
+    write /proc/sys/kernel/sched_wakeup_granularity_ns 1000000
+    write /proc/sys/kernel/sched_min_granularity_ns 800000
     write /proc/sys/kernel/sched_features 24188
-    write /proc/sys/kernel/sched_compat_yield 1
-    write /proc/sys/kernel/sched_child_runs_first 1
+	write /proc/sys/kernel/sched_compat_yield 1
+    write /proc/sys/kernel/sched_child_runs_first 0
 
 # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
@@ -332,7 +332,7 @@ on boot
 
     write /proc/sys/vm/overcommit_memory 1
     write /proc/sys/vm/min_free_order_shift 4
-    write /sys/module/lowmemorykiller/parameters/minfree 1536,2048,4096,5120,15360,23040
+	write /sys/module/lowmemorykiller/parameters/minfree 3584,4096,6144,20992,23040,25088
 
     # Set init its forked children's oom_adj.
     write /proc/1/oom_adj -16
@@ -340,6 +340,7 @@ on boot
     # Tweak background writeout
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
+	write /proc/sys/vm/min_free_kbytes 3072
 
     # Permissions for System Server and daemons.
 #    chown radio system /sys/android_power/state

@@ -76,10 +76,14 @@
 #include <asm/irq_regs.h>
 
 #include "sched_cpupri.h"
+#include "sched_autogroup.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
+#ifdef CONFIG_KERNEL_DEBUG_SEC // klaatu
+#include <linux/kernel_sec_common.h>
+#endif
 /*
  * Convert user-nice values [ -20 ... 0 ... 19 ]
  * to static priority [ MAX_RT_PRIO..MAX_PRIO-1 ],
@@ -272,6 +276,10 @@ struct task_group {
 	struct task_group *parent;
 	struct list_head siblings;
 	struct list_head children;
+
+#ifdef CONFIG_SCHED_AUTOGROUP
+  struct autogroup *autogroup;
+#endif
 };
 
 #ifdef CONFIG_USER_SCHED
@@ -358,7 +366,7 @@ static inline struct task_group *task_group(struct task_struct *p)
 #else
 	tg = &init_task_group;
 #endif
-	return tg;
+	return autogroup_task_group(p, tg);
 }
 
 /* Change a task's cfs_rq and parent entity if it moves across CPUs/groups */
@@ -870,6 +878,26 @@ static inline u64 global_rt_runtime(void)
 static inline int task_current(struct rq *rq, struct task_struct *p)
 {
 	return rq->curr == p;
+}
+
+/*
+ * Look for any tasks *anywhere* that are running nice 0 or better. We do
+ * this lockless for overhead reasons since the occasional wrong result
+ * is harmless.
+ */
+int above_background_load(void)
+{
+  struct task_struct *cpu_curr;
+  unsigned long cpu;
+
+  for_each_online_cpu(cpu) {
+    cpu_curr = cpu_rq(cpu)->curr;
+    if (unlikely(!cpu_curr))
+    continue;
+    if (PRIO_TO_NICE(cpu_curr->static_prio) < 1)
+    return 1;
+  }
+  return 0;
 }
 
 #ifndef __ARCH_WANT_UNLOCKED_CTXSW
@@ -1819,6 +1847,7 @@ static void update_sysctl(void);
 #include "sched_idletask.c"
 #include "sched_fair.c"
 #include "sched_rt.c"
+#include "sched_autogroup.c"
 #ifdef CONFIG_SCHED_DEBUG
 # include "sched_debug.c"
 #endif
@@ -9374,6 +9403,24 @@ void __init sched_init(void)
 	int i, j;
 	unsigned long alloc_size = 0, ptr;
 
+/*
+ *  Add GAForensic init for preventing symbol removal for optimization. (tkhwang)
+ */
+//{
+	GAFINFO.rq_struct_curr = offsetof(struct rq, curr);
+
+	 unsigned short *checksum	=	&(GAFINFO.GAFINFOCheckSum);
+	 unsigned char  *memory		=	&GAFINFO;
+	 unsigned char	address;
+	 for (*checksum=0,address = 0; address < (sizeof(GAFINFO)-sizeof(GAFINFO.GAFINFOCheckSum)); address++)
+	 {
+		if ((*checksum) & 0x8000)
+		(*checksum) = (((*checksum) << 1) | 1 ) ^ memory[address];
+		else
+		(*checksum) = ((*checksum) << 1) ^ memory[address];
+	 }
+//}	 
+	
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	alloc_size += 2 * nr_cpu_ids * sizeof(void **);
 #endif
@@ -9450,7 +9497,7 @@ void __init sched_init(void)
 #ifdef CONFIG_GROUP_SCHED
 	list_add(&init_task_group.list, &task_groups);
 	INIT_LIST_HEAD(&init_task_group.children);
-
+	autogroup_init(&init_task);
 #ifdef CONFIG_USER_SCHED
 	INIT_LIST_HEAD(&root_task_group.children);
 	init_task_group.parent = &root_task_group;
@@ -10955,3 +11002,4 @@ void synchronize_sched_expedited(void)
 EXPORT_SYMBOL_GPL(synchronize_sched_expedited);
 
 #endif /* #else #ifndef CONFIG_SMP */
+

@@ -27,14 +27,14 @@ struct timekeeper {
 	struct clocksource *clock;
 	/* The shift value of the current clocksource. */
 	int	shift;
-
 	/* Number of clock cycles in one NTP interval. */
 	cycle_t cycle_interval;
 	/* Number of clock shifted nano seconds in one NTP interval. */
 	u64	xtime_interval;
+	/* shifted nano seconds left over when rounding cycle_interval */
+	s64  xtime_remainder;
 	/* Raw nano seconds accumulated per NTP interval. */
 	u32	raw_interval;
-
 	/* Clock shifted nano seconds remainder not stored in xtime.tv_nsec. */
 	u64	xtime_nsec;
 	/* Difference between accumulated time and NTP time in ntp
@@ -62,7 +62,7 @@ struct timekeeper timekeeper;
 static void timekeeper_setup_internals(struct clocksource *clock)
 {
 	cycle_t interval;
-	u64 tmp;
+	u64 tmp, ntpinterval;
 
 	timekeeper.clock = clock;
 	clock->cycle_last = clock->read(clock);
@@ -70,6 +70,7 @@ static void timekeeper_setup_internals(struct clocksource *clock)
 	/* Do the ns -> cycle conversion first, using original mult */
 	tmp = NTP_INTERVAL_LENGTH;
 	tmp <<= clock->shift;
+	ntpinterval = tmp;
 	tmp += clock->mult/2;
 	do_div(tmp, clock->mult);
 	if (tmp == 0)
@@ -781,7 +782,8 @@ void update_wall_time(void)
 
 		/* accumulate error between NTP and clock interval */
 		timekeeper.ntp_error += tick_length;
-		timekeeper.ntp_error -= timekeeper.xtime_interval <<
+		timekeeper.ntp_error -=
+				(timekeeper.xtime_interval + timekeeper.xtime_remainder) <<
 					timekeeper.ntp_error_shift;
 	}
 
