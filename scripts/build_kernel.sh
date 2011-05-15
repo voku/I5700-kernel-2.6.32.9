@@ -2,36 +2,28 @@
 
 #Set CPU Environment Variable
 if [ "$CPU_JOB_NUM" = "" ] ; then
-        CPU_JOB_NUM=4
+        CPU_JOB_NUM=8
 fi
 
 Usage()
 {
 echo "build_kernel.sh - building script android kernel"
-echo "  Usage: ./build_kernel.sh <r880 | r880tom3q>"
+echo "  Usage: ./build_kernel.sh "
 echo
 
 exit 1
 }
 
 OPTION=-k
-PRODUCT=r880tom3q
-#PRODUCT=$1
+PRODUCT=r880
 
 case "$PRODUCT" in
-	r880*)
-		MODULES="ibtgpio camera cmm dpram dpram_recovery g2d g3d jpeg mfc multipdp param pp rotator vibetonz"
 
-		case "$PRODUCT" in
-			r880)
-				KERNEL_DEF_CONFIG=r880_android_defconfig
-			;;
-			r880tom3q)
-				KERNEL_DEF_CONFIG=r880_tom3q_defconfig
-			;;
-		esac 
-		;;
-		
+    r880)		
+                MODULES="g2d g3d mfc vibetonz bcm4325 btgpio camera cmm dpram jpeg mfc2 multipdp okmfc param pp rfs rotator staryuwlan wl wlan xsr vibetonz ramzswap"
+                KERNEL_DEF_CONFIG=r880_voku_defconfig
+                ;;
+    
 	*)
 		Usage
 		;;
@@ -43,8 +35,7 @@ fi
 
 KERNEL_DIR=$PWD_DIR/Kernel
 MODULES_DIR=$PWD_DIR/modules
-CTNG_BIN_DIR=/opt/ctng/bin
-
+CTNG_BIN_DIR=/usr/bin/
 
 prepare_kernel()
 {
@@ -78,7 +69,6 @@ build_modules()
 	if [ $? != 0 ] ; then
 	    exit 1
 	fi
-	#exit 1
 
 	for module in $MODULES
 	do
@@ -90,7 +80,9 @@ build_modules()
 		    cp ./*.ko  $KERNEL_DIR/../initramfs/lib/modules
 		fi
 	done 
+
 }
+
 
 build_kernel()
 {
@@ -125,13 +117,10 @@ build_kernel()
 	cp $KERNEL_DIR/net/netfilter/xt_TCPMSS.ko            $KERNEL_DIR/../initramfs/lib/modules
 	cp $KERNEL_DIR/drivers/net/tun.ko                    $KERNEL_DIR/../initramfs/lib/modules
 
-	$CTNG_BIN_DIR/arm-spica-linux-uclibcgnueabi-strip -g $KERNEL_DIR/../initramfs/lib/modules/dhd.ko
-	$CTNG_BIN_DIR/arm-spica-linux-uclibcgnueabi-strip -g $KERNEL_DIR/../initramfs/lib/modules/xt_TCPMSS.ko
-	$CTNG_BIN_DIR/arm-spica-linux-uclibcgnueabi-strip -g $KERNEL_DIR/../initramfs/lib/modules/tun.ko
+	$CTNG_BIN_DIR/*-strip -g $KERNEL_DIR/../initramfs/lib/modules/*
  
 	make
 }
-
 
 case "$OPTION" in
 	-k)

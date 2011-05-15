@@ -17,14 +17,14 @@ loglevel 3
     export SD_EXT_DIRECTORY /sd-ext
     export BOOTCLASSPATH /system/framework/core.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/android.policy.jar:/system/framework/services.jar
     export TERMINFO /system/etc/terminfo
-    export _XXCFLAGS="-O3 -march=armv6kz -mtune=arm1176jzf-s -mcpu=arm1176jzf-s -mfpu=vfp -mfloat-abi=softfp --param l1-cache-size=16 --param l1-cache-line-size=32"
+    export _XXCFLAGS="-Ofast -march=armv6kz -mtune=arm1176jzf-s -mcpu=arm1176jzf-s -mfpu=vfp -mfloat-abi=softfp --param l1-cache-size=16 --param l1-cache-line-size=32"
 
 # Backward compatibility
     symlink /system/etc /etc
     symlink /sys/kernel/debug /d
 
 # Kernel version
-    setprop ro.build.display.id "VOKU-kernel 2.6.32.9 v0.2"
+    setprop ro.build.display.id "VOKU-kernel 2.6.32.9 v0.3"
 
 # insert modules
     insmod /lib/modules/xsr.ko
@@ -34,8 +34,19 @@ loglevel 3
     insmod /lib/modules/dpram.ko
     insmod /lib/modules/multipdp.ko
 
-    insmod /lib/modules/param.ko
+    insmod /lib/modules/s3c_rotator.ko
+    insmod /lib/modules/s3c_mfc.ko
+    insmod /lib/modules/s3c_g2d_driver.ko
+    #insmod /lib/modules/s3c_pp.ko
+    insmod /lib/modules/s3c_jpeg.ko
+    #insmod /lib/modules/s3c_g3d.ko
+    insmod /lib/modules/s3c_cmm.ko
+    #insmod /lib/modules/s3c_camera.ko
+
     insmod /lib/modules/vibrator.ko
+    insmod /lib/modules/param.ko
+    #insmod /lib/modules/qt5480.ko
+    #insmod /lib/modules/xt_owner.ko
 
 # create mountpoints
     mkdir /mnt 0775 root system
@@ -82,8 +93,14 @@ loglevel 3
     write /proc/sys/kernel/sched_latency_ns 10000000
     write /proc/sys/kernel/sched_wakeup_granularity_ns 1000000
     write /proc/sys/kernel/sched_min_granularity_ns 800000
-    write /proc/sys/kernel/sched_features 24188
-	write /proc/sys/kernel/sched_compat_yield 1
+    write /proc/sys/kernel/sched_rt_runtime_us -1
+    write /proc/sys/kernel/sched_rt_period_us 100000
+    write /proc/sys/kernel/msgmni 2048
+    write /proc/sys/kernel/msgmax 64000
+    write /proc/sys/kernel/shmall 86530
+    write /proc/sys/kernel/sem 500 512000 64 2048
+    write /proc/sys/kernel/sched_compat_yield 1
+    write /proc/sys/kernel/sched_shares_ratelimit 256000
     write /proc/sys/kernel/sched_child_runs_first 0
 
 # Create cgroup mount points for process groups
@@ -294,7 +311,6 @@ loglevel 3
     setprop alsa.mixer.capture.bluetooth.a2dp "Capture"
 
 on boot
-
 # basic network init
     ifup lo
     hostname localhost
@@ -337,10 +353,39 @@ on boot
     # Set init its forked children's oom_adj.
     write /proc/1/oom_adj -16
 
-    # Tweak background writeout
-    write /proc/sys/vm/dirty_expire_centisecs 200
-    write /proc/sys/vm/dirty_background_ratio  5
-	write /proc/sys/vm/min_free_kbytes 3072
+    # Misc kernel tuning
+    write /proc/sys/kernel/printk 4 6 1 4
+
+    # Tweak kernel VM management
+    write /proc/sys/vm/oom_kill_allocating_task 1
+    write /proc/sys/vm/dirty_expire_centisecs 1500
+    write /proc/sys/vm/dirty_writeback_centisecs 500
+    write /proc/sys/vm/dirty_background_ratio 10
+    write /proc/sys/vm/dirty_ratio 30
+    write /proc/sys/vm/vfs_cache_pressure 10
+    write /proc/sys/vm/min_free_kbytes 3072
+
+    # Tweak network parameters
+    write /proc/sys/net/ipv4/tcp_mem 256960 256960 256960
+    write /proc/sys/net/core/wmem_max 404480
+    write /proc/sys/net/core/rmem_max 404480
+    write /proc/sys/net/ipv4/tcp_wmem 4096 16384 404480
+    write /proc/sys/net/ipv4/tcp_rmem 4096 87380 404480
+    write /proc/sys/net/core/rmem_default 256960
+    write /proc/sys/net/core/wmem_default 256960
+    write /proc/sys/net/ipv4/tcp_timestamps 0
+    write /proc/sys/net/ipv4/tcp_tw_reuse 1
+    write /proc/sys/net/ipv4/tcp_sack 1
+    write /proc/sys/net/ipv4/tcp_tw_recycle 1
+    write /proc/sys/net/ipv4/tcp_no_metrics_save 1
+    write /proc/sys/net/ipv4/tcp_window_scaling 1
+    write /proc/sys/net/ipv4/tcp_keepalive_probes 5
+    write /proc/sys/net/ipv4/tcp_keepalive_time 1200
+    write /proc/sys/net/ipv4/tcp_keepalive_intvl 30
+    write /proc/sys/net/ipv4/tcp_fin_timeout 30
+    write /proc/sys/net/ipv4/tcp_congestion_control cubic
+    write /proc/sys/net/ipv4/route/flush 1
+    write /proc/sys/net/core/netdev_max_backlog 2500
 
     # Permissions for System Server and daemons.
 #    chown radio system /sys/android_power/state
