@@ -328,11 +328,11 @@ CHECK		= sparse
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-MODFLAGS    = -DMODULE -Ofast -marm -mfpu=vfp -mtune=arm1176jzf-s -march=armv6zk -mfloat-abi=softfp -floop-interchange -floop-strip-mine -floop-block -ffast-math -funsafe-loop-optimizations
+MODFLAGS    = -DMODULE -Ofast -marm -mfpu=vfp -mtune=arm1176jzf-s -march=armv6zk -mfloat-abi=softfp -floop-interchange -floop-strip-mine -floop-block -ffast-math -funsafe-loop-optimizations -funroll-loops
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
 LDFLAGS_MODULE  =
-CFLAGS_KERNEL   = -Ofast -march=armv6zk -mtune=arm1176jzf-s -floop-interchange -floop-strip-mine -floop-block -ffast-math -funsafe-loop-optimizations -mfloat-abi=softfp -mfpu=vfp
+CFLAGS_KERNEL   = -Ofast -march=armv6zk -mtune=arm1176jzf-s -floop-interchange -floop-strip-mine -floop-block -ffast-math -funsafe-loop-optimizations -mfloat-abi=softfp -mfpu=vfp -funroll-loops
 AFLAGS_KERNEL   =
 CFLAGS_GCOV		= -fprofile-arcs -ftest-coverage
 
