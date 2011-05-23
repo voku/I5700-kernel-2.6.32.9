@@ -20,13 +20,14 @@ loglevel 3
     export BOOTCLASSPATH /system/framework/core.jar:/system/framework/bouncycastle.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/android.policy.jar:/system/framework/services.jar:/system/framework/core-junit.jar
 
 # Kernel version
-    setprop ro.build.display.id "Gotenks Kernel 2.6.32.9 v1.0"
+    setprop ro.build.display.id "VOKU-kernel v0.3"
 
 # Backward compatibility
     symlink /system/etc /etc
     symlink /sys/kernel/debug /d
 
 # insert modules
+
     insmod /lib/modules/xsr.ko
     insmod /lib/modules/xsr_stl.ko
     insmod /lib/modules/rfs.ko
@@ -34,8 +35,18 @@ loglevel 3
     insmod /lib/modules/dpram.ko
     insmod /lib/modules/multipdp.ko
 
-    insmod /lib/modules/param.ko
+    insmod /lib/modules/s3c_rotator.ko
+    insmod /lib/modules/s3c_mfc.ko
+    insmod /lib/modules/s3c_g2d_driver.ko
+    #insmod /lib/modules/s3c_pp.ko
+    insmod /lib/modules/s3c_jpeg.ko
+    #insmod /lib/modules/s3c_g3d.ko
+    insmod /lib/modules/s3c_cmm.ko
+    #insmod /lib/modules/s3c_camera.ko
     insmod /lib/modules/vibrator.ko
+    insmod /lib/modules/param.ko
+    #insmod /lib/modules/qt5480.ko
+    #insmod /lib/modules/xt_owner.ko
 
     symlink /system/vendor /vendor
 
@@ -333,7 +344,7 @@ on boot
     write /proc/sys/vm/dirty_ratio 10
     write /proc/sys/vm/vfs_cache_pressure 100
     write /proc/sys/vm/min_free_kbytes 4096
-    write /sys/module/lowmemorykiller/parameters/minfree 1536,2048,4096,5120,5632,6144
+	write /sys/module/lowmemorykiller/parameters/minfree 3584,4096,6144,20992,23040,25088
 
     # Set init its forked children's oom_adj.
     write /proc/1/oom_adj -16

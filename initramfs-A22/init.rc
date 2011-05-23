@@ -87,21 +87,7 @@ loglevel 3
 
     mkdir /sd-ext 0771 system system
 
-    write /proc/sys/kernel/panic_on_oops 1
-    write /proc/sys/kernel/hung_task_timeout_secs 0
-    write /proc/cpu/alignment 4
-    write /proc/sys/kernel/sched_latency_ns 10000000
-    write /proc/sys/kernel/sched_wakeup_granularity_ns 1000000
-    write /proc/sys/kernel/sched_min_granularity_ns 800000
-    write /proc/sys/kernel/sched_rt_runtime_us -1
-    write /proc/sys/kernel/sched_rt_period_us 100000
-    write /proc/sys/kernel/msgmni 2048
-    write /proc/sys/kernel/msgmax 64000
-    write /proc/sys/kernel/shmall 86530
-    write /proc/sys/kernel/sem 500 512000 64 2048
-    write /proc/sys/kernel/sched_compat_yield 1
-    write /proc/sys/kernel/sched_shares_ratelimit 256000
-    write /proc/sys/kernel/sched_child_runs_first 0
+    write /proc/sys/kernel/sched_wakeup_granularity_ns 2000000
 
 # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
@@ -357,11 +343,9 @@ on boot
     write /proc/sys/kernel/printk 4 6 1 4
 
     # Tweak kernel VM management
+    write /proc/sys/vm/dirty_expire_centisecs 200
+    write /proc/sys/vm/dirty_background_ratio  5
     write /proc/sys/vm/oom_kill_allocating_task 1
-    write /proc/sys/vm/dirty_expire_centisecs 1500
-    write /proc/sys/vm/dirty_writeback_centisecs 500
-    write /proc/sys/vm/dirty_background_ratio 10
-    write /proc/sys/vm/dirty_ratio 30
     write /proc/sys/vm/vfs_cache_pressure 10
     write /proc/sys/vm/min_free_kbytes 3072
 

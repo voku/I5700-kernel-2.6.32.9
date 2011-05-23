@@ -219,11 +219,11 @@ static struct regulator_init_data wm8350_dcdc1_data = {
 static struct regulator_init_data wm8350_dcdc3_data = {
 	.constraints = {
 		.name = "PVDD_MEM",
-		.min_uV = 1800000,
-		.max_uV = 1800000,
+		.min_uV = 1700000,
+		.max_uV = 1700000,
 		.always_on = 1,
 		.state_mem = {
-			 .uV = 1800000,
+			 .uV = 1700000,
 			 .mode = REGULATOR_MODE_NORMAL,
 			 .enabled = 1,
 		 },

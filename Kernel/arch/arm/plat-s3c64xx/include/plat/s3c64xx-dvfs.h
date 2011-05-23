@@ -10,7 +10,7 @@
 #ifndef __PLAT_S3C64XX_DVFS_H
 #define __PLAT_S3C64XX_DVFS_H __FILE__
 
-#define MAXIMUM_FREQ 800000
+#define MAXIMUM_FREQ policy->max
 //#undef USE_DVS
 #define USE_DVS
 //#define USE_DVFS_AL1_LEVEL
@@ -27,6 +27,4 @@ extern unsigned int s3c64xx_target_frq(unsigned int pred_freq, int flag);
 extern void set_dvfs_level(int flag);
 extern void set_dvfs_perf_level(void);
 
-extern void dvfs_set_max_freq_lock(void);
-extern void dvfs_set_max_freq_unlock(void);
 #endif /* __PLAT_S3C64XX_DVFS_H */

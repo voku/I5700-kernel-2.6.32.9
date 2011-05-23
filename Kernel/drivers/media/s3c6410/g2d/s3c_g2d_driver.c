@@ -19,7 +19,6 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
- 
 #include <linux/init.h>
 
 #include <linux/moduleparam.h>
@@ -106,27 +105,19 @@ static struct mutex g_g2d_clk_mutex;
 static struct mutex *h_rot_mutex;
 
 static u16 s3c_g2d_poll_flag = 0;
-static int s3c_g2d_flag = 0;
+static u16 g2d_timeout = 0;
+
 int shift_x,shift_y;
 
 int s3c_g2d_check_fifo(int empty_fifo)
 {
 	int count = 0;
 
-//	while((__raw_readl(s3c_g2d_base + S3C_G2D_FIFO_STAT_REG)&0x3f) > (FIFO_NUM - empty_fifo) );
-//	while((((__raw_readl(s3c_g2d_base + S3C_G2D_FIFO_STAT_REG)&0x7e) >> 1)) > (FIFO_NUM - empty_fifo) );
-
 	while((((__raw_readl(s3c_g2d_base + S3C_G2D_FIFO_STAT_REG)&0x7e) >> 1)) > (FIFO_NUM - empty_fifo) && count < G2D_CHECK_FIFO_COUNT)
 		count++;
 	if (count == G2D_CHECK_FIFO_COUNT)
 		return false;
 	return true;
-}
-
-void s3c_g2d_soft_reset(void)
-{
-  	__raw_writel(1, s3c_g2d_base + S3C_G2D_CONTROL_REG);
-	return;
 }
 static int s3c_g2d_init_regs(s3c_g2d_params *params)
 {
@@ -206,7 +197,7 @@ static int s3c_g2d_init_regs(s3c_g2d_params *params)
 			break;
 		}
 		alpha_reg |= S3C_G2D_ROP_REG_ABM_REGISTER |  G2D_ROP_SRC_ONLY;
-		//__raw_writel(S3C_G2D_ROP_REG_OS_FG_COLOR | S3C_G2D_ROP_REG_ABM_REGISTER |  S3C_G2D_ROP_REG_T_OPAQUE_MODE | G2D_ROP_SRC_ONLY, s3c_g2d_base + S3C_G2D_ROP_REG);
+
 		if(params->alpha_val > ALPHA_VALUE_MAX){
 			printk(KERN_ALERT"s3c g2d dirver error: exceed alpha value range 0~255\n");
                	 return -ENOENT;
@@ -501,7 +492,6 @@ irqreturn_t s3c_g2d_irq(int irq, void *dev_id)
 	    	__raw_writel ( S3C_G2D_PEND_REG_INTP_CMD_FIN, s3c_g2d_base + S3C_G2D_INTC_PEND_REG );
 		wake_up_interruptible(&waitq_g2d);
 		s3c_g2d_poll_flag = 1;
-		s3c_g2d_flag = 1;
 	}
 	}
 	return IRQ_HANDLED;
@@ -667,16 +657,16 @@ static int s3c_g2d_ioctl(struct inode *inode, struct file *file, unsigned int cm
 
 	params	= (s3c_g2d_params*)file->private_data;
 	if (copy_from_user(params, (s3c_g2d_params*)arg, sizeof(s3c_g2d_params)))
+        {
+		return -EFAULT;
+	}
+        
+          if((params->src_work_width <= 0) || (params->src_work_height <= 0)|| 
+	  (params->dst_work_width <= 0) || (params->dst_work_height <= 0))
 	{
 		return -EFAULT;
 	}
-
-	if((params->src_work_width <= 1) || (params->src_work_height <= 1)|| 
-	  (params->dst_work_width <= 1) || (params->dst_work_height <= 1))
-	{
-		return -EFAULT;
-	}	
-
+	
 	mutex_lock(h_rot_mutex);
 #ifdef USE_G2D_DOMAIN_GATING
 #ifndef USE_G2D_TIMER_FOR_CLK
@@ -734,20 +724,14 @@ static int s3c_g2d_ioctl(struct inode *inode, struct file *file, unsigned int cm
 	// block mode
 	if(!(file->f_flags & O_NONBLOCK))
 	{
-		if(s3c_g2d_flag == 0){
-
-		if (interruptible_sleep_on_timeout(&waitq_g2d, G2D_TIMEOUT) == 0)
+		if (interruptible_sleep_on_timeout(&waitq_g2d,g2d_timeout) == 0)
 		{
 			printk(KERN_ERR "\n%s: Waiting for interrupt is timeout\n", __FUNCTION__);
-			ret = 0;
-			//ret = -EFAULT;
 		}
-	}
-		s3c_g2d_flag = 0;
 	}
 
 err_cmd:
-       s3c_g2d_soft_reset();
+
 #ifdef USE_G2D_DOMAIN_GATING
 #ifdef USE_G2D_TIMER_FOR_CLK
 		spin_lock(&g2d_domain_lock);
@@ -806,7 +790,8 @@ int s3c_g2d_probe(struct platform_device *pdev)
 #ifdef G2D_DEBUG
 	printk(KERN_ALERT"s3c_g2d_probe called\n");
 #endif
-
+	g2d_timeout = msecs_to_jiffies(G2D_TIMEOUT);
+	
 	/* find the IRQs */
 	s3c_g2d_irq_num = platform_get_irq(pdev, 0);
 	if(s3c_g2d_irq_num <= 0) {

@@ -29,6 +29,11 @@
 #include <linux/poll.h>
 #include <linux/mm.h>
 #include <linux/bitops.h>
+#include <linux/xmister.h>
+
+/* For Android */
+//#define ANDROID_BUF_NUM 12 - See xmister.c
+
 
 #define snd_pcm_substream_chip(substream) ((substream)->private_data)
 #define snd_pcm_chip(pcm) ((pcm)->private_data)
@@ -38,7 +43,7 @@
 #endif
 
  //Sec_Feature Mr. Lee Ju hwan
-#define CONFIG_ANDROID_BUF_NUM 16
+//#define CONFIG_ANDROID_BUF_NUM 16
 
 /*
  *  Hardware (lowlevel) section

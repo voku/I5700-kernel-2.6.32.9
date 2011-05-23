@@ -1416,6 +1416,10 @@ config CPU_FREQ_S3C24XX_DEBUGFS
 	help
 	  Export status information via debugfs.
 
+config CPU_FREQ_S3C64XX
+  bool "CPUfreq support for Samsung S3C64XX CPUs"
+  depends on CPU_FREQ && CPU_S3C6410
+
 endif
 
 source "drivers/cpuidle/Kconfig"

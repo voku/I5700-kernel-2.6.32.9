@@ -16,7 +16,6 @@
 #include <linux/cpu.h>
 #include <linux/syscalls.h>
 #include <linux/cpufreq.h>
-#include <plat/s3c64xx-dvfs.h>
 #include "power.h"
 
 const char *const pm_states[PM_SUSPEND_MAX] = {
@@ -130,9 +129,6 @@ static int suspend_enter(suspend_state_t state)
 {
 	int error;
 
-#ifdef CONFIG_CPU_FREQ
-	dvfs_set_max_freq_lock();
-#endif /* CONFIG_CPU_FREQ */
 	if (suspend_ops->prepare) {
 		error = suspend_ops->prepare();
 		if (error)
@@ -170,9 +166,6 @@ static int suspend_enter(suspend_state_t state)
 
 	arch_suspend_enable_irqs();
 	BUG_ON(irqs_disabled());
-#ifdef CONFIG_CPU_FREQ
-	dvfs_set_max_freq_unlock();       
-#endif /* CONFIG_CPU_FREQ */
 
  Enable_cpus:
 	enable_nonboot_cpus();
