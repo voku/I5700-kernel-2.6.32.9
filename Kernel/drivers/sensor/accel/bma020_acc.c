@@ -87,16 +87,6 @@ static ssize_t bma020_fs_write(struct device *dev, struct device_attribute *attr
 
 static DEVICE_ATTR(acc_file, S_IRUGO | S_IWUSR | S_IWOTH | S_IXOTH, bma020_fs_read, bma020_fs_write);
 
-
-#if 0
-static irqreturn_t bma020_acc_isr( int irq, void *unused, struct pt_regs *regs )
-{
-	printk( "bma020_acc_isr event occur!!!\n" );
-	
-	return IRQ_HANDLED;
-}
-#endif
-
 //go2sun.park@ 2010-08-06
 // fd open/close matching
 int bma020_open (struct inode *inode, struct file *filp)
@@ -123,57 +113,6 @@ int bma020_release (struct inode *inode, struct file *filp)
 	
 	return 0;
 }
-
-#if 0
-int bma020_ioctl(struct inode *inode, struct file *filp, unsigned int ioctl_num,  unsigned long arg)
-{
-	bma020acc_t accels;
-	unsigned int arg_data; 
-	int err = 0;
-	
-	gprintk("start\n");
-	switch( ioctl_num )
-	{
-		case IOCTL_BMA020_GET_ACC_VALUE :
-			{
-				bma020_read_accel_xyz( &accels );
-
-				gprintk( "acc data x = %d  /  y =  %d  /  z = %d\n", accels.x, accels.y, accels.z );
-				
-				if( copy_to_user( (bma020acc_t*)arg, &accels, sizeof(bma020acc_t) ) )
-				{
-					err = -EFAULT;
-				}   
-
-			}
-			break;
-		
-		case IOC_SET_ACCELEROMETER :  
-			{
-				if( copy_from_user( (unsigned int*)&arg_data, (unsigned int*)arg, sizeof(unsigned int) ) )
-				{
-				
-				}
-				if( arg_data == BMA020_POWER_ON )
-				{
-					printk( "ioctl : bma020 power on\n" );
-					bma020_set_mode( BMA020_MODE_NORMAL );
-				}
-				else
-				{
-					printk( "ioctl : bma020 power off\n" );
-					bma020_set_mode( BMA020_MODE_SLEEP );
-				}
-			}
-			break;
-		default : 
-			break;
-	}
-	return err;
-	
-}
-#endif
-
 
 int bma020_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,  unsigned long arg)
 {
@@ -207,16 +146,6 @@ int bma020_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,  unsi
 #endif
 		return -EFAULT;
 	}
-	#if 0
-	/* check bam150_client */
-	if( bma150_client == NULL)
-	{
-#if DEBUG
-		printk("I2C driver not install\n");
-#endif
-		return -EFAULT;
-	}
-	#endif
 
 	switch(cmd)
 	{
@@ -279,23 +208,6 @@ struct file_operations acc_fops =
 	.release = bma020_release,
 };
 
-//go2sun.park@ 2010-08-06
-//Remove Early_suspend mode
-//#ifdef CONFIG_HAS_EARLYSUSPEND
-#if 0
-static void bma020_early_suspend(struct early_suspend *handler)
-{
-	printk( "%s \n", __func__ );
-	bma020_set_mode( BMA020_MODE_SLEEP );
-}
-
-static void bma020_late_resume(struct early_suspend *handler)
-{
-	printk( "%s : Set MODE NORMAL\n", __func__ );
-	bma020_set_mode( BMA020_MODE_NORMAL );
-}
-#endif /* CONFIG_HAS_EARLYSUSPEND */ 
-
 void bma020_chip_init(void)
 {
 	printk("%s \n",__func__); 
@@ -304,14 +216,6 @@ void bma020_chip_init(void)
 
 	bma020.bma020_bus_write = i2c_acc_bma020_write;
 	bma020.bma020_bus_read  = i2c_acc_bma020_read;
-
-//go2sun.park@ 2010-08-06
-//#ifdef CONFIG_HAS_EARLYSUSPEND
-#if 0
-	bma020.early_suspend.suspend = bma020_early_suspend;
-	bma020.early_suspend.resume = bma020_late_resume;
-	register_early_suspend(&bma020.early_suspend);
-#endif
 
 	/*call init function to set read write functions, read registers */
 	bma020_init( &bma020 );
@@ -384,21 +288,6 @@ int bma020_acc_start(void)
 
 	gprintk("[BMA020] ===================================\n");
 	
-	/* only for test */
-	#if 0
-	printk( "before get xyz\n" );
-	mdelay(3000);
-
-	while(1)
-	{
-		bma020_read_accel_xyz( &accels );
-
-		printk( "acc data x = %d  /  y =  %d  /  z = %d\n", accels.x, accels.y, accels.z );
-	
-		mdelay(100);
-	}
-	#endif
-
 #ifdef BMA020_PROC_FS
 	create_proc_read_entry(DRIVER_PROC_ENTRY, 0, 0, bma020_proc_read, NULL);
 #endif	//BMA020_PROC_FS
@@ -417,48 +306,11 @@ void bma020_acc_end(void)
 
 	device_destroy( acc_class, MKDEV(BMA150_MAJOR, 0) );
 	class_destroy( acc_class );
-#if 0
-	unregister_early_suspend(&bma020.early_suspend);
-#endif
 }
 
 
 static int bma020_accelerometer_probe( struct platform_device* pdev )
 {
-/* not use interrupt */
-#if 0	
-	int ret;
-
-	//enable_acc_pins();
-	/*
-	mhn_gpio_set_direction(MFP_ACC_INT, GPIO_DIR_IN);
-	mhn_mfp_set_pull(MFP_ACC_INT, MFP_PULL_HIGH);
-	*/
-
-	bma020_irq_num = platform_get_irq(pdev, 0);
-	ret = request_irq(bma020_irq_num, (void *)bma020_acc_isr, IRQF_DISABLED, pdev->name, NULL);
-	if(ret) {
-		printk("[BMA020 ACC] isr register error\n");
-		return ret;
-	}
-
-	//set_irq_type (bma020_irq_num, IRQT_BOTHEDGE);
-	
-	/* if( request_irq( IRQ_GPIO( MFP2GPIO(MFP_ACC_INT) ), (void *) bma020_acc_isr, 0, "BMA020_ACC_ISR", (void *)0 ) )
-	if(
-	{
-		printk ("[BMA020 ACC] isr register error\n" );
-	}
-	else
-	{
-		printk( "[BMA020 ACC] isr register success!!!\n" );
-	}*/
-	
-	// set_irq_type ( IRQ_GPIO( MFP2GPIO(MFP_ACC_INT) ), IRQT_BOTHEDGE );
-
-	/* if interrupt don't register Process don't stop for polling mode */ 
-
-#endif
 	printk("%s \n",__func__); 
 	return bma020_acc_start();
 }

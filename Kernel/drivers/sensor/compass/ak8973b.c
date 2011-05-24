@@ -117,16 +117,6 @@ static struct i2c_driver ak8973b_i2c_driver = {
 
 static char ak_e2prom_data[3];
 
-void report_value_for_prx(int value)
-{
-		
-	struct ak8973b_data *data = i2c_get_clientdata(this_client);
-	printk("[AK8973] Proximity = %d\n", value);
-	input_report_abs(data->input_dev, ABS_DISTANCE,value );
-	input_sync(data->input_dev);
-
-}
-
 static int AKI2C_RxData(char *rxData, int length)
 {
 	struct i2c_msg msgs[] = {
@@ -236,14 +226,6 @@ static void AKECS_Report_Value(short *rbuf)
 		input_report_abs(data->input_dev, ABS_HAT0Y, rbuf[10]);
 		input_report_abs(data->input_dev, ABS_BRAKE, rbuf[11]);
 	}
-	/* Report proximity information */
-	/*
-	if (atomic_read(&p_flag)) {
-		rbuf[12]=gp2a_get_proximity_value();
-		gprintk("Proximity = %d\n", rbuf[12]);
-		input_report_abs(data->input_dev, ABS_DISTANCE, rbuf[12]);
-	}
-	*/
 	
 	input_sync(data->input_dev);
 }
@@ -267,13 +249,11 @@ static void AKECS_CloseDone(void)
 	atomic_set(&a_flag, 1);
 	atomic_set(&t_flag, 1);
 	atomic_set(&mv_flag, 1);
-    atomic_set(&p_flag, 1);
 	#else
 	atomic_set(&m_flag, 0);
 	atomic_set(&a_flag, 0);
 	atomic_set(&t_flag, 0);
 	atomic_set(&mv_flag, 0);
-    atomic_set(&p_flag, 0);
 	#endif
 }
 
@@ -449,7 +429,7 @@ static int AKECS_GetData (short *rbuf)
 
 static void AKECS_DATA_Measure(void)
 {
-	short  value[13];
+	short  value[12];
 	short mag_sensor[4] ={0, 0, 0, 0};
 
 	AKECS_GetData(mag_sensor);
@@ -465,7 +445,6 @@ static void AKECS_DATA_Measure(void)
 	value[9]=mag_sensor[1];		/* mag_x */
 	value[10]=mag_sensor[2];	/* mag_y */
 	value[11]=mag_sensor[3];	/* mag_z */
-	//value[12]=gp2a_get_proximity_value();
 
 	AKECS_Report_Value(value);
 }
@@ -503,7 +482,6 @@ akm_aot_ioctl(struct inode *inode, struct file *file,
 		case ECS_IOCTL_APP_SET_AFLAG:
 		case ECS_IOCTL_APP_SET_TFLAG:
 		case ECS_IOCTL_APP_SET_MVFLAG:
-		case ECS_IOCTL_APP_SET_PFLAG:
 			if (copy_from_user(&flag, argp, sizeof(flag)))
 				return -EFAULT;
 			if (flag < 0 || flag > 1)
@@ -542,12 +520,6 @@ akm_aot_ioctl(struct inode *inode, struct file *file,
 		case ECS_IOCTL_APP_GET_MVFLAG:
 			flag = atomic_read(&mv_flag);
 			break;
-		case ECS_IOCTL_APP_SET_PFLAG:
-			atomic_set(&p_flag, flag);
-			break;
-		case ECS_IOCTL_APP_GET_PFLAG:
-			flag = atomic_read(&p_flag);
-			break;
 		case ECS_IOCTL_APP_SET_DELAY:
 			akmd_delay = flag;
 			break;
@@ -566,7 +538,6 @@ akm_aot_ioctl(struct inode *inode, struct file *file,
 		case ECS_IOCTL_APP_GET_AFLAG:
 		case ECS_IOCTL_APP_GET_TFLAG:
 		case ECS_IOCTL_APP_GET_MVFLAG:
-		case ECS_IOCTL_APP_GET_PFLAG:
 		case ECS_IOCTL_APP_GET_DELAY:
 			if (copy_to_user(argp, &flag, sizeof(flag)))
 				return -EFAULT;
@@ -877,8 +848,6 @@ static int __devinit i2c_ak8973b_probe(struct i2c_client *client, const struct i
 	input_set_abs_params(akm->input_dev, ABS_HAT0Y, -2048, 2032, 0, 0);
 	/* z-axis of raw magnetic vector */
 	input_set_abs_params(akm->input_dev, ABS_BRAKE, -2048, 2032, 0, 0);
-	/* proximity sensor */	
-	input_set_abs_params(akm->input_dev, ABS_DISTANCE, -3, 3, 0, 0);
 	
 	akm->input_dev->name = "compass";
 

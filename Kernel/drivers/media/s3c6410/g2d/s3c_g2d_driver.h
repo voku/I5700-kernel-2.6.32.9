@@ -39,7 +39,7 @@
 #define S3C_G2D_ROTATOR_X_FLIP		_IO(G2D_IOCTL_MAGIC,4)
 #define S3C_G2D_ROTATOR_Y_FLIP		_IO(G2D_IOCTL_MAGIC,5)
 
-#define G2D_TIMEOUT		20 //hjkang_DD24 camcorder preview rack when recording 100->20 
+#define G2D_TIMEOUT		100 
 #define ALPHA_VALUE_MAX	255
 
 

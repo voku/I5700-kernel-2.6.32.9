@@ -46,10 +46,10 @@ file /res/images/indeterminate3.png                 ../initramfs/res/images/inde
 file /res/images/indeterminate4.png                 ../initramfs/res/images/indeterminate4.png                 0644 0 0
 file /res/images/indeterminate5.png                 ../initramfs/res/images/indeterminate5.png                 0644 0 0
 file /res/images/indeterminate6.png                 ../initramfs/res/images/indeterminate6.png                 0644 0 0
-file /res/images/icon_firmware_install.png          ../initramfs/res/images/icon_firmware_install.png          0644 0 0
 file /res/images/icon_error.png                     ../initramfs/res/images/icon_error.png                     0644 0 0
 file /res/images/icon_installing.png                ../initramfs/res/images/icon_installing.png                0644 0 0
 file /res/images/icon_firmware_error.png            ../initramfs/res/images/icon_firmware_error.png            0644 0 0
+file /res/images/icon_firmware_install.png          ../initramfs/res/images/icon_firmware_install.png          0644 0 0
 file /res/images/progress_bar_empty_right_round.png ../initramfs/res/images/progress_bar_empty_right_round.png 0644 0 0
 file /res/images/progress_bar_fill.png              ../initramfs/res/images/progress_bar_fill.png              0644 0 0
 file /res/images/progress_bar_empty.png             ../initramfs/res/images/progress_bar_empty.png             0644 0 0
