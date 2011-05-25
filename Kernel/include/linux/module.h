@@ -289,7 +289,7 @@ struct module
 	/* If this is non-NULL, vfree after init() returns */
 	void *module_init;
 
-	/* Here is the actual code & data, vfree'd on unload. */
+	/* Here is the actual code + data, vfree'd on unload. */
 	void *module_core;
 
 	/* Here are the sizes of the init and core sections */

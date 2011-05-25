@@ -34,7 +34,7 @@ static char procfs_buffer[PROCFS_SIZE]="0\0\0";
  *
  */
 static unsigned long procfs_buffer_size=1;
-static unsigned int undervolt=100;
+static unsigned int undervolt=0;
 #define DEF_800 1350
 #define DEF_400 1150
 #define DEF_266 1100
@@ -86,7 +86,7 @@ static struct cpufreq_frequency_table freq_table_532MHz[] = {
 
 static struct cpufreq_frequency_table freq_table_800MHz[] = {
 	{0, 1066*KHZ_T},
-	{1, 660*KHZ_T},
+	{1, 533*KHZ_T},
 	{2, 355*KHZ_T},	
 	{3, 177*KHZ_T},
 #ifdef USE_DVFS_AL1_LEVEL
@@ -143,7 +143,7 @@ static const unsigned int frequency_match_532MHz[][4] = {
 static unsigned int frequency_match_800MHz[][4] = {
 /* frequency, Mathced VDD ARM voltage , Matched VDD INT*/
 	{1066000, DEF_800, 1250, 0},
-	{660000, DEF_400, 1250, 1},
+	{533000, DEF_400, 1250, 1},
 	{355000, DEF_266, 1250, 2},
 	{177000, DEF_133, 1250, 3},
 #ifdef USE_DVFS_AL1_LEVEL

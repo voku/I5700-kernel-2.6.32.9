@@ -267,11 +267,16 @@ extern void task_rq_unlock_wait(struct task_struct *p);
 extern cpumask_var_t nohz_cpu_mask;
 #if defined(CONFIG_SMP) && defined(CONFIG_NO_HZ)
 extern int select_nohz_load_balancer(int cpu);
-extern int get_nohz_load_balancer(void);
+extern int nohz_ratelimit(int cpu);
 #else
 static inline int select_nohz_load_balancer(int cpu)
 {
-	return 0;
+    return 0;
+}
+
+static inline int nohz_ratelimit(int cpu)
+{
+    return 0;
 }
 #endif
 
@@ -1735,6 +1740,7 @@ extern int task_free_unregister(struct notifier_block *n);
 /*
  * Per process flags
  */
+#define PF_KSOFTIRQD    0x00000001  /* I am ksoftirqd */
 #define PF_ALIGNWARN	0x00000001	/* Print alignment warning msgs */
 					/* Not implemented yet, only for 486*/
 #define PF_STARTING	0x00000002	/* being created */

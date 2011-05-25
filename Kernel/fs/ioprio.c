@@ -257,4 +257,3 @@ SYSCALL_DEFINE2(ioprio_get, int, which, int, who)
 	read_unlock(&tasklist_lock);
 	return ret;
 }
-

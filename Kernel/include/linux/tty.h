@@ -23,8 +23,10 @@
  */
 #define NR_UNIX98_PTY_DEFAULT	4096      /* Default maximum for Unix98 ptys */
 #define NR_UNIX98_PTY_MAX	(1 << MINORBITS) /* Absolute limit */
-#define NR_LDISCS		20
-
+/* LGE_KERNEL_MUX START */
+/* #define NR_LDISCS		20 */
+#define NR_LDISCS		22
+/* LGE_KERNEL_MUX END */ 
 /* line disciplines */
 #define N_TTY		0
 #define N_SLIP		1
@@ -48,6 +50,10 @@
 #define N_PPS		18	/* Pulse per Second */
 
 #define N_V253		19	/* Codec control over voice modem */
+/* LGE_KERNEL_MUX START */
+#define N_TS0710        20      /* Gsm0710 multiplexer */
+/* LGE_KERNEL_MUX END */ 
+#define N_RIN           21      /* Raw IP Network, vsnet */ 
 
 /*
  * This character is the same as _POSIX_VDISABLE: it cannot be used as
@@ -67,6 +73,17 @@ struct tty_buffer {
 	/* Data points here */
 	unsigned long data[0];
 };
+
+/*
+ * We default to dicing tty buffer allocations to this many characters
+ * in order to avoid multiple page allocations. We know the size of
+ * tty_buffer itself but it must also be taken into account that the
+ * the buffer is 256 byte aligned. See tty_buffer_find for the allocation
+ * logic this must match
+ */
+
+#define TTY_BUFFER_PAGE	(((PAGE_SIZE - sizeof(struct tty_buffer)) / 2) & ~0xFF)
+
 
 struct tty_bufhead {
 	struct delayed_work work;
@@ -266,7 +283,15 @@ struct tty_struct {
 	void *driver_data;
 	struct list_head tty_files;
 
+#ifdef CONFIG_MACH_STAR_TMUS
+//LGE_TELECA_CR:707_DATA_THROUGHPUT START
+//LGE_TELECA_CR:1056_SPI/MUX_IMPROVEMENT START
+#define N_TTY_BUF_SIZE 32768
+//LGE_TELECA_CR:1056_SPI/MUX_IMPROVEMENT END
+//LGE_TELECA_CR:707_DATA_THROUGHPUT END
+#else
 #define N_TTY_BUF_SIZE 4096
+#endif
 
 	/*
 	 * The following is data for the N_TTY line discipline.  For

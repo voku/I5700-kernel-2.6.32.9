@@ -1,4 +1,3 @@
-/*
 /* g2d/s3c_g2d_driver.h
  *
  * Copyright (c) 2008 Samsung Electronics

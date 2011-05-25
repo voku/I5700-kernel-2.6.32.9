@@ -1,7 +1,7 @@
 /*
  * Automatically generated C config: don't edit
  * Linux kernel version: 2.6.32.9
- * Mon May 23 15:31:21 2011
+ * Wed May 25 18:10:08 2011
  */
 #define AUTOCONF_INCLUDED
 #define CONFIG_MMC_SDHCI_S3C_DMA 1
@@ -323,7 +323,6 @@
 #define CONFIG_INET_XFRM_MODE_TRANSPORT 1
 #define CONFIG_EPOLL 1
 #define CONFIG_CRYPTO_AEAD2 1
-#define CONFIG_UID_STAT 1
 #define CONFIG_MSDOS_FS 1
 #define CONFIG_ROMFS_FS 1
 #define CONFIG_ZBOOT_ROM_TEXT 0x0
@@ -409,6 +408,7 @@
 #define CONFIG_EARLYSUSPEND 1
 #define CONFIG_CPU_ABRT_EV6 1
 #define CONFIG_VECTORS_BASE 0xffff0000
+#define CONFIG_NET_ACTIVITY_STATS 1
 #define CONFIG_HZ 200
 #define CONFIG_NETFILTER_XT_MATCH_HELPER 1
 #define CONFIG_CPU_32v6K 1
