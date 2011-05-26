@@ -72,18 +72,6 @@ static struct sk_buff *l2cap_build_cmd(struct l2cap_conn *conn,
 				u8 code, u8 ident, u16 dlen, void *data);
 
 /* ---- L2CAP timers ---- */
-static void l2cap_sock_set_timer(struct sock *sk, long timeout)
-{
-  BT_DBG("sk %p state %d timeout %ld", sk, sk->sk_state, timeout);
-  sk_reset_timer(sk, &sk->sk_timer, jiffies + timeout);
-}
-
-static void l2cap_sock_clear_timer(struct sock *sk)
-{
-  BT_DBG("sock %p state %d", sk, sk->sk_state);
-  sk_stop_timer(sk, &sk->sk_timer);
-}
-
 static void l2cap_sock_timeout(unsigned long arg)
 {
 	struct sock *sk = (struct sock *) arg;
@@ -92,14 +80,6 @@ static void l2cap_sock_timeout(unsigned long arg)
 	BT_DBG("sock %p state %d", sk, sk->sk_state);
 
 	bh_lock_sock(sk);
-
-  if (sock_owned_by_user(sk)) {
-  /* sk is owned by user. Try again later */
-    l2cap_sock_set_timer(sk, HZ / 5);
-    bh_unlock_sock(sk);
-    sock_put(sk);
-    return;
-  }
 
 	if (sk->sk_state == BT_CONNECTED || sk->sk_state == BT_CONFIG)
 		reason = ECONNREFUSED;
@@ -115,6 +95,18 @@ static void l2cap_sock_timeout(unsigned long arg)
 
 	l2cap_sock_kill(sk);
 	sock_put(sk);
+}
+
+static void l2cap_sock_set_timer(struct sock *sk, long timeout)
+{
+	BT_DBG("sk %p state %d timeout %ld", sk, sk->sk_state, timeout);
+	sk_reset_timer(sk, &sk->sk_timer, jiffies + timeout);
+}
+
+static void l2cap_sock_clear_timer(struct sock *sk)
+{
+	BT_DBG("sock %p state %d", sk, sk->sk_state);
+	sk_stop_timer(sk, &sk->sk_timer);
 }
 
 /* ---- L2CAP channels ---- */
@@ -2717,14 +2709,6 @@ static inline int l2cap_connect_rsp(struct l2cap_conn *conn, struct l2cap_cmd_hd
 		break;
 
 	default:
-    /* don't delete l2cap channel if sk is owned by user */
-    if (sock_owned_by_user(sk)) {
-        sk->sk_state = BT_DISCONN;
-        l2cap_sock_clear_timer(sk);
-        l2cap_sock_set_timer(sk, HZ / 5);
-        break;
-    }
-
 		l2cap_chan_del(sk, ECONNREFUSED);
 		break;
 	}
@@ -2849,6 +2833,11 @@ static inline int l2cap_config_rsp(struct l2cap_conn *conn, struct l2cap_cmd_hdr
 			int len = cmd->len - sizeof(*rsp);
 			char req[64];
 
+			if (len > sizeof(req) - sizeof(struct l2cap_conf_req)) {
+				l2cap_send_disconn_req(conn, sk);
+				goto done;
+			}
+
 			/* throw out any old stored conf requests */
 			result = L2CAP_CONF_SUCCESS;
 			len = l2cap_parse_conf_rsp(sk, rsp->data,
@@ -2920,15 +2909,6 @@ static inline int l2cap_disconnect_req(struct l2cap_conn *conn, struct l2cap_cmd
 
 	sk->sk_shutdown = SHUTDOWN_MASK;
 
-  /* don't delete l2cap channel if sk is owned by user */
-  if (sock_owned_by_user(sk)) {
-    sk->sk_state = BT_DISCONN;
-    l2cap_sock_clear_timer(sk);
-    l2cap_sock_set_timer(sk, HZ / 5);
-    bh_unlock_sock(sk);
-    return 0;
-  }
-
 	skb_queue_purge(TX_QUEUE(sk));
 	skb_queue_purge(SREJ_QUEUE(sk));
 	del_timer(&l2cap_pi(sk)->retrans_timer);
@@ -2955,15 +2935,6 @@ static inline int l2cap_disconnect_rsp(struct l2cap_conn *conn, struct l2cap_cmd
 	sk = l2cap_get_chan_by_scid(&conn->chan_list, scid);
 	if (!sk)
 		return 0;
-
-  /* don't delete l2cap channel if sk is owned by user */
-  if (sock_owned_by_user(sk)) {
-    sk->sk_state = BT_DISCONN;
-    l2cap_sock_clear_timer(sk);
-    l2cap_sock_set_timer(sk, HZ / 5);
-    bh_unlock_sock(sk);
-    return 0;
-  }
 
 	skb_queue_purge(TX_QUEUE(sk));
 	skb_queue_purge(SREJ_QUEUE(sk));
@@ -3939,16 +3910,24 @@ static ssize_t l2cap_sysfs_show(struct class *dev, char *buf)
 	struct sock *sk;
 	struct hlist_node *node;
 	char *str = buf;
+	int size = PAGE_SIZE;
 
 	read_lock_bh(&l2cap_sk_list.lock);
 
 	sk_for_each(sk, node, &l2cap_sk_list.head) {
 		struct l2cap_pinfo *pi = l2cap_pi(sk);
+		int len;
 
-		str += sprintf(str, "%s %s %d %d 0x%4.4x 0x%4.4x %d %d %d\n",
+		len = snprintf(str, size, "%s %s %d %d 0x%4.4x 0x%4.4x %d %d %d\n",
 				batostr(&bt_sk(sk)->src), batostr(&bt_sk(sk)->dst),
 				sk->sk_state, __le16_to_cpu(pi->psm), pi->scid,
 				pi->dcid, pi->imtu, pi->omtu, pi->sec_level);
+
+		size -= len;
+		if (size <= 0)
+			break;
+
+		str += len;
 	}
 
 	read_unlock_bh(&l2cap_sk_list.lock);
@@ -4062,4 +4041,3 @@ MODULE_DESCRIPTION("Bluetooth L2CAP ver " VERSION);
 MODULE_VERSION(VERSION);
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("bt-proto-0");
-

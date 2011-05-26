@@ -75,10 +75,7 @@ static void rfcomm_make_uih(struct sk_buff *skb, u8 addr);
 
 static void rfcomm_process_connect(struct rfcomm_session *s);
 
-static struct rfcomm_session *rfcomm_session_create(bdaddr_t *src,
-                                                       bdaddr_t *dst,
-                                                       u8 sec_level,
-                                                       int *err);
+static struct rfcomm_session *rfcomm_session_create(bdaddr_t *src, bdaddr_t *dst, int *err);
 static struct rfcomm_session *rfcomm_session_get(bdaddr_t *src, bdaddr_t *dst);
 static void rfcomm_session_del(struct rfcomm_session *s);
 
@@ -247,6 +244,16 @@ static inline int rfcomm_check_security(struct rfcomm_dlc *d)
 								auth_type);
 }
 
+static void rfcomm_session_timeout(unsigned long arg)
+{
+	struct rfcomm_session *s = (void *) arg;
+
+	BT_DBG("session %p state %ld", s, s->state);
+
+	set_bit(RFCOMM_TIMED_OUT, &s->flags);
+	rfcomm_schedule(RFCOMM_SCHED_TIMEO);
+}
+
 /* ---- RFCOMM DLCs ---- */
 static void rfcomm_dlc_timeout(unsigned long arg)
 {
@@ -255,6 +262,7 @@ static void rfcomm_dlc_timeout(unsigned long arg)
 	BT_DBG("dlc %p state %ld", d, d->state);
 
 	set_bit(RFCOMM_TIMED_OUT, &d->flags);
+	rfcomm_dlc_put(d);
 	rfcomm_schedule(RFCOMM_SCHED_TIMEO);
 }
 
@@ -281,7 +289,6 @@ static void rfcomm_dlc_clear_state(struct rfcomm_dlc *d)
 	d->state      = BT_OPEN;
 	d->flags      = 0;
 	d->mscex      = 0;
-  d->sec_level  = BT_SECURITY_LOW;
 	d->mtu        = RFCOMM_DEFAULT_MTU;
 	d->v24_sig    = RFCOMM_V24_RTC | RFCOMM_V24_RTR | RFCOMM_V24_DV;
 
@@ -371,7 +378,7 @@ static int __rfcomm_dlc_open(struct rfcomm_dlc *d, bdaddr_t *src, bdaddr_t *dst,
 
 	s = rfcomm_session_get(src, dst);
 	if (!s) {
-		s = rfcomm_session_create(src, dst, d->sec_level, &err);
+		s = rfcomm_session_create(src, dst, &err);
 		if (!s)
 			return err;
 	}
@@ -643,10 +650,7 @@ static void rfcomm_session_close(struct rfcomm_session *s, int err)
 	rfcomm_session_put(s);
 }
 
-static struct rfcomm_session *rfcomm_session_create(bdaddr_t *src,
-                                                       bdaddr_t *dst,
-                                                       u8 sec_level,
-                                                       int *err)
+static struct rfcomm_session *rfcomm_session_create(bdaddr_t *src, bdaddr_t *dst, int *err)
 {
 	struct rfcomm_session *s = NULL;
 	struct sockaddr_l2 addr;
@@ -671,7 +675,6 @@ static struct rfcomm_session *rfcomm_session_create(bdaddr_t *src,
 	sk = sock->sk;
 	lock_sock(sk);
 	l2cap_pi(sk)->imtu = l2cap_mtu;
-  l2cap_pi(sk)->sec_level = sec_level;
 	release_sock(sk);
 
 	s = rfcomm_session_add(sock, BT_BOUND);
@@ -1119,8 +1122,7 @@ static int rfcomm_recv_ua(struct rfcomm_session *s, u8 dlci)
 
 		case BT_DISCONN:
 			if (s->sock->sk->sk_state != BT_CLOSED)
-        if (list_empty(&s->dlcs))
-				  rfcomm_session_put(s);
+				rfcomm_session_put(s);
 			break;
 		}
 	}
@@ -1747,7 +1749,6 @@ static inline void rfcomm_process_dlcs(struct rfcomm_session *s)
 
 		if (test_bit(RFCOMM_TIMED_OUT, &d->flags)) {
 			__rfcomm_dlc_close(d, ETIMEDOUT);
-	    rfcomm_dlc_put(d);
 			continue;
 		}
 
@@ -1874,6 +1875,13 @@ static inline void rfcomm_process_sessions(void)
 	list_for_each_safe(p, n, &session_list) {
 		struct rfcomm_session *s;
 		s = list_entry(p, struct rfcomm_session, list);
+
+		if (test_and_clear_bit(RFCOMM_TIMED_OUT, &s->flags)) {
+			s->state = BT_DISCONN;
+			rfcomm_send_disc(s, 0);
+			rfcomm_session_put(s);
+			continue;
+		}
 
 		if (s->state == BT_LISTEN) {
 			rfcomm_accept_connection(s);
@@ -2051,6 +2059,7 @@ static ssize_t rfcomm_dlc_sysfs_show(struct class *dev, char *buf)
 	struct rfcomm_session *s;
 	struct list_head *pp, *p;
 	char *str = buf;
+	int size = PAGE_SIZE;
 
 	rfcomm_lock();
 
@@ -2059,11 +2068,21 @@ static ssize_t rfcomm_dlc_sysfs_show(struct class *dev, char *buf)
 		list_for_each(pp, &s->dlcs) {
 			struct sock *sk = s->sock->sk;
 			struct rfcomm_dlc *d = list_entry(pp, struct rfcomm_dlc, list);
+			int len;
 
-			str += sprintf(str, "%s %s %ld %d %d %d %d\n",
+			len = snprintf(str, size, "%s %s %ld %d %d %d %d\n",
 					batostr(&bt_sk(sk)->src), batostr(&bt_sk(sk)->dst),
 					d->state, d->dlci, d->mtu, d->rx_credits, d->tx_credits);
+
+			size -= len;
+			if (size <= 0)
+				break;
+
+			str += len;
 		}
+
+		if (size <= 0)
+			break;
 	}
 
 	rfcomm_unlock();
@@ -2145,4 +2164,3 @@ MODULE_DESCRIPTION("Bluetooth RFCOMM ver " VERSION);
 MODULE_VERSION(VERSION);
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("bt-proto-3");
-
