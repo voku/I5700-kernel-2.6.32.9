@@ -1,7 +1,7 @@
 /*
  * Automatically generated C config: don't edit
  * Linux kernel version: 2.6.32.9
- * Thu May 26 09:11:41 2011
+ * Thu May 26 12:51:39 2011
  */
 #define AUTOCONF_INCLUDED
 #define CONFIG_MMC_SDHCI_S3C_DMA 1
@@ -526,7 +526,6 @@
 #define CONFIG_CPU_V6 1
 #define CONFIG_INPUT_UINPUT 1
 #define CONFIG_CRYPTO_BLKCIPHER 1
-#define CONFIG_BROADCOM_WIFI_MODULE 1
 #define CONFIG_HID 1
 #define CONFIG_IP_NF_RAW 1
 #define CONFIG_NLATTR 1
@@ -563,6 +562,7 @@
 #define CONFIG_SYSCTL 1
 #define CONFIG_MISC_FILESYSTEMS 1
 #define CONFIG_HAVE_OPROFILE 1
+#define CONFIG_STACKTRACE 1
 #define CONFIG_SND 1
 #define CONFIG_DYNAMIC_TIMER 1
 #define CONFIG_SND_SOC_AK4671 1

@@ -400,24 +400,21 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 		cgtime = sig->cgtime;
 		rsslim = sig->rlim[RLIMIT_RSS].rlim_cur;
 
-        /* add up live thread stats at the group level */
-        if (whole) {
-            struct task_cputime cputime;
-            struct task_struct *t = task;
-            do {
-                min_flt += t->min_flt;
-                maj_flt += t->maj_flt;
-                gtime = cputime_add(gtime, task_gtime(t));
-                t = next_thread(t);
-            } while (t != task);
+		/* add up live thread stats at the group level */
+		if (whole) {
+			struct task_struct *t = task;
+			do {
+				min_flt += t->min_flt;
+				maj_flt += t->maj_flt;
+				gtime = cputime_add(gtime, task_gtime(t));
+				t = next_thread(t);
+			} while (t != task);
 
-            min_flt += sig->min_flt;
-            maj_flt += sig->maj_flt;
-            thread_group_cputime(task, &cputime);
-            utime = cputime.utime;
-            stime = cputime.stime;
-            gtime = cputime_add(gtime, sig->gtime);
-        }
+			min_flt += sig->min_flt;
+			maj_flt += sig->maj_flt;
+			thread_group_times(task, &utime, &stime);
+			gtime = cputime_add(gtime, sig->gtime);
+		}
 
 		sid = task_session_nr_ns(task, ns);
 		ppid = task_tgid_nr_ns(task->real_parent, ns);

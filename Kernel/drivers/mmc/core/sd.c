@@ -110,6 +110,11 @@ static int mmc_decode_csd(struct mmc_card *card)
 		e = UNSTUFF_BITS(resp, 47, 3);
 		m = UNSTUFF_BITS(resp, 62, 12);
 		csd->capacity	  = (1 + m) << (e + 2);
+#ifdef CONFIG_EMBEDDED_MMC_START_OFFSET
+		BUG_ON(card->host->ops->get_host_offset(card->host) >=
+			csd->capacity);
+		csd->capacity -= card->host->ops->get_host_offset(card->host);
+#endif
 
 		csd->read_blkbits = UNSTUFF_BITS(resp, 80, 4);
 		csd->read_partial = UNSTUFF_BITS(resp, 79, 1);
@@ -126,7 +131,6 @@ static int mmc_decode_csd(struct mmc_card *card)
 		 * values. To avoid getting tripped by buggy cards,
 		 * we assume those fixed values ourselves.
 		 */
-		mmc_card_set_blockaddr(card);
 
 		csd->tacc_ns	 = 0; /* Unused */
 		csd->tacc_clks	 = 0; /* Unused */
@@ -138,6 +142,12 @@ static int mmc_decode_csd(struct mmc_card *card)
 
 		m = UNSTUFF_BITS(resp, 48, 22);
 		csd->capacity     = (1 + m) << 10;
+#ifdef CONFIG_EMBEDDED_MMC_START_OFFSET
+		BUG_ON((card->host->ops->get_host_offset(card->host) >> 9) >=
+			csd->capacity);
+		csd->capacity -=
+			(card->host->ops->get_host_offset(card->host) >> 9);
+#endif
 
 		csd->read_blkbits = 9;
 		csd->read_partial = 0;
@@ -336,6 +346,7 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 	int err;
 	u32 cid[4];
 	unsigned int max_dtr;
+	u32 rocr;
 #ifdef CONFIG_MMC_PARANOID_SD_INIT
 	int retries;
 #endif
@@ -360,7 +371,7 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 	if (!err)
 		ocr |= 1 << 30;
 
-	err = mmc_send_app_op_cond(host, ocr, NULL);
+	err = mmc_send_app_op_cond(host, ocr, &rocr);
 	if (err)
 		goto err;
 
@@ -393,6 +404,11 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 
 		card->type = MMC_TYPE_SD;
 		memcpy(card->raw_cid, cid, sizeof(card->raw_cid));
+		/* Set the block addressing mode based on the
+		 * access mode bit in the OCR register */
+		if (rocr & MMC_CARD_ACCESS_MODE)
+			mmc_card_set_blockaddr(card);
+		host->card = card;
 	}
 
 	/*
@@ -528,14 +544,12 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 		}
 	}
 
-	if (!oldcard)
-		host->card = card;
-
 	return 0;
 
 free_card:
 	if (!oldcard)
 		mmc_remove_card(card);
+	host->card = NULL;
 err:
 
 	return err;

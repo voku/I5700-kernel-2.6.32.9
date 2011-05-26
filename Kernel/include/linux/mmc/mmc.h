@@ -202,6 +202,7 @@ struct _mmc_csd {
  * OCR bits are mostly in host.h
  */
 #define MMC_CARD_BUSY	0x80000000	/* Card Power up status bit */
+#define MMC_CARD_ACCESS_MODE	0x40000000	/* Card Access Mode bit */
 
 /*
  * Card Command Classes (CCC)
@@ -257,7 +258,7 @@ struct _mmc_csd {
 #define EXT_CSD_REV		192	/* RO */
 #define EXT_CSD_SEC_CNT		212	/* RO, 4 bytes */
 #define EXT_CSD_S_A_TIMEOUT	217
-
+#define EXT_CSD_BOOT_SIZE_MULTI 226
 /*
  * EXT_CSD field definitions
  */
@@ -268,6 +269,9 @@ struct _mmc_csd {
 
 #define EXT_CSD_CARD_TYPE_26	(1<<0)	/* Card can run at 26MHz */
 #define EXT_CSD_CARD_TYPE_52	(1<<1)	/* Card can run at 52MHz */
+
+/* 20100901  eMMC 4.4 Support */
+#define EXT_CSD_CARD_TYPE_DDR52 (1<<2)   /* Card can run at DDR 52MHz */
 
 #define EXT_CSD_BUS_WIDTH_1	0	/* Card is in 1 bit mode */
 #define EXT_CSD_BUS_WIDTH_4	1	/* Card is in 4 bit mode */

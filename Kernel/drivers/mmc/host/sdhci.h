@@ -17,7 +17,6 @@
 /*
  * Controller registers
  */
-#define SUPPORT_CLK_GATING 1
 
 #define SDHCI_DMA_ADDRESS	0x00
 
@@ -65,6 +64,7 @@
 #define SDHCI_HOST_CONTROL 	0x28
 #define  SDHCI_CTRL_LED		0x01
 #define  SDHCI_CTRL_4BITBUS	0x02
+#define  SDHCI_CTRL_8BITBUS	0x20
 #define  SDHCI_CTRL_HISPD	0x04
 #define  SDHCI_CTRL_DMA_MASK	0x18
 #define   SDHCI_CTRL_SDMA	0x00
@@ -126,7 +126,7 @@
 #define  SDHCI_INT_DATA_MASK	(SDHCI_INT_DATA_END | SDHCI_INT_DMA_END | \
 		SDHCI_INT_DATA_AVAIL | SDHCI_INT_SPACE_AVAIL | \
 		SDHCI_INT_DATA_TIMEOUT | SDHCI_INT_DATA_CRC | \
-		SDHCI_INT_DATA_END_BIT | SDHCI_ADMA_ERROR)
+		SDHCI_INT_DATA_END_BIT | SDHCI_INT_ADMA_ERROR)
 #define SDHCI_INT_ALL_MASK	((unsigned int)-1)
 
 #define SDHCI_ACMD12_ERR	0x3C
@@ -235,14 +235,22 @@ struct sdhci_host {
 #define SDHCI_QUIRK_DELAY_AFTER_POWER			(1<<23)
 /* Controller uses SDCLK instead of TMCLK for data timeouts */
 #define SDHCI_QUIRK_DATA_TIMEOUT_USES_SDCLK		(1<<24)
+/* Controller write protect bit is broken. Assume no write protection */
+#define SDHCI_QUIRK_BROKEN_WRITE_PROTECT		(1<<25)
+/* Controller needs INTERRUPT_AT_BLOCK_GAP enabled to detect card interrupts */
+#define SDHCI_QUIRK_ENABLE_INTERRUPT_AT_BLOCK_GAP	(1<<26)
+/* Controller should not program HIGH_SPEED_EN after switching to high speed */
+#define SDHCI_QUIRK_BROKEN_CTRL_HISPD			(1<<27)
+/* Controller handles ADMA descriptor with length 0000h incorrectly */
+#define SDHCI_QUIRK_NO_64KB_ADMA			(1<<28)
+/* Version reported in HOST_VERSION is incorrect */
+#define SDHCI_QUIRK_BROKEN_SPEC_VERSION			(1<<29)
+/* Controller should not use SDIO IRQ */
+#define SDHCI_QUIRK_NO_SDIO_IRQ				(1<<30)
+/* Controller allows runtime enable / disable */
+#define SDHCI_QUIRK_RUNTIME_DISABLE			(1<<31)
 
 	int			irq;		/* Device IRQ */
-	int			irq_cd;		/* SD Card Detection IRQ */
-
-	unsigned int 		hwport;
-	struct clk		*clk_io;	/* clock for io bus */
-	struct clk		*clk_bus;
-	
 	void __iomem *		ioaddr;		/* Mapped address */
 
 	const struct sdhci_ops	*ops;		/* Low level hw interface */
@@ -266,6 +274,7 @@ struct sdhci_host {
 
 	unsigned int		version;	/* SDHCI spec. version */
 
+	unsigned int		last_clk;	/* Last configured clock */
 	unsigned int		max_clk;	/* Max possible freq (MHz) */
 	unsigned int		timeout_clk;	/* Timeout freq (KHz) */
 
@@ -292,14 +301,13 @@ struct sdhci_host {
 	struct tasklet_struct	finish_tasklet;
 
 	struct timer_list	timer;		/* Timer for timeouts */
-#if SUPPORT_CLK_GATING
-	struct timer_list	busy_check_timer;
+
+#ifdef CONFIG_EMBEDDED_MMC_START_OFFSET
+	unsigned int		start_offset;	/* Zero-offset for MBR */
 #endif
+	unsigned int		data_width;	/* Width of data transfers */
 
 	unsigned long		private[0] ____cacheline_aligned;
-#ifdef CONFIG_CPU_FREQ
-        struct notifier_block           freq_transition;
-#endif
 };
 
 
@@ -319,6 +327,10 @@ struct sdhci_ops {
 	unsigned int	(*get_max_clock)(struct sdhci_host *host);
 	unsigned int	(*get_min_clock)(struct sdhci_host *host);
 	unsigned int	(*get_timeout_clock)(struct sdhci_host *host);
+	/* returns card read-only status in a host-specific way if
+	 * SDHCI_QUIRK_BROKEN_WRITE_PROTECT is set */
+	int		(*get_ro)(struct sdhci_host *host);
+	bool		(*card_detect)(struct sdhci_host *host);
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS
@@ -416,9 +428,11 @@ static inline void *sdhci_priv(struct sdhci_host *host)
 
 extern int sdhci_add_host(struct sdhci_host *host);
 extern void sdhci_remove_host(struct sdhci_host *host, int dead);
-extern void sdhci_set_clock(struct sdhci_host *host, unsigned int clock);
+extern void sdhci_card_detect_callback(struct sdhci_host *host);
 
 #ifdef CONFIG_PM
+//20110214, , cancel delayed work queue when the device enter sleep 
+extern int sdhci_cancel_delayed_work(struct sdhci_host *host, pm_message_t state);
 extern int sdhci_suspend_host(struct sdhci_host *host, pm_message_t state);
 extern int sdhci_resume_host(struct sdhci_host *host);
 #endif
