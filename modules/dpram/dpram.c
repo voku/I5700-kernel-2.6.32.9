@@ -8,6 +8,7 @@
 
 #define _DEBUG
 #define _ENABLE_ERROR_DEVICE
+//#undef _ENABLE_ERROR_DEVICE
 #undef _DPRAM_DEBUG_HEXDUMP
 
 #include <linux/module.h>
@@ -24,20 +25,12 @@
 #include <linux/irq.h>
 #include <linux/rtc.h>
 #include <linux/poll.h>
-#include <linux/mtd/mtd.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-
-#include <mach/gpio-cfg.h>
+#include <plat/regs-gpio.h>
+#include <plat/gpio-cfg.h>
 #include <mach/hardware.h>
-#include <mach/gpio.h>
-
-#ifdef CONFIG_MACH_GT_I5700
-#include <mach/gt_i5700.h>
-#endif
-
-#include <linux/sched.h>
-
+#include <mach/spica.h>
 
 #ifdef CONFIG_EVENT_LOGGING
 #include <linux/time.h>
@@ -46,6 +39,8 @@
 #include <asm/unistd.h>
 #endif	/* CONFIG_EVENT_LOGGING */
 
+#include <linux/sched.h>
+
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
 #endif	/* CONFIG_PROC_FS */
@@ -53,8 +48,10 @@
 #include <linux/wakelock.h>
 
 #include "dpram.h"
-
-#define GPIO_LABEL(gpio)	(#gpio)
+#include "BML.h"
+#include "OCLDReg.h"
+#include "OCLD.h"
+#include <mach/param.h>
 
 #define DRIVER_ID			"$Id: dpram.c, v0.01 2008/12/29 08:00:00 $"
 #define DRIVER_NAME 		"DPRAM"
@@ -119,11 +116,12 @@ static int requested_semaphore = 0;
 static int phone_sync = 0;
 static int dump_on = 0;
 static int phone_power_state = 0;
+static int modem_wait_count = 0;
 
 // the value for checking sim status change on sleep.
 static int sim_state = 0;
 
-static int dpram_phone_getstatus(void);
+static int dpram_phone_getstatus();
 #define DPRAM_VBASE dpram_base
 static struct tty_driver *dpram_tty_driver;
 static dpram_tasklet_data_t dpram_tasklet_data[MAX_INDEX];
@@ -192,9 +190,11 @@ static char dpram_err_buf[DPRAM_ERR_MSG_LEN];
 struct class *dpram_class;
 
 static DECLARE_WAIT_QUEUE_HEAD(dpram_err_wait_q);
-static struct fasync_struct *dpram_err_async_q;
 #endif	/* _ENABLE_ERROR_DEVICE */
+static struct fasync_struct *dpram_err_async_q;
 
+// 2008.10.20.
+static DECLARE_MUTEX(write_mutex);
 struct wake_lock dpram_wake_lock;
 
 #ifdef CONFIG_EVENT_LOGGING
@@ -301,6 +301,7 @@ static inline void byte_align(unsigned long dest, unsigned long src)
 	}
 }
 
+#if 0
 static inline void _memcpy(void *p_dest, const void *p_src, int size)
 {
 	int i;
@@ -308,7 +309,7 @@ static inline void _memcpy(void *p_dest, const void *p_src, int size)
 	unsigned long src = (unsigned long)p_src;
 
 	if (!(*onedram_sem)) {
-		printk("[OneDRAM] (%s) memory access without semaphore!: %d\n", __func__, *onedram_sem);
+		printk("[OneDRAM] (%s) memory access without semaphore!: %d\n", *onedram_sem);
 		return;
 	}
 	if (size <= 0) {
@@ -324,13 +325,60 @@ static inline void _memcpy(void *p_dest, const void *p_src, int size)
 			byte_align(dest+i, src+i);
 	}
 }
+#else
+static inline void _memcpy(void *p_dest, const void *p_src, int size)
+{
+	unsigned long dest = (unsigned long)p_dest;
+	unsigned long src = (unsigned long)p_src;
+
+	if (!(*onedram_sem)) {
+		printk("[OneDRAM] memory access without semaphore!: %d\n", *onedram_sem);
+		return;
+	}
+	if (size <= 0) {
+		return;
+	}
+
+	if (dest & 1) {
+		byte_align(dest, src);
+		dest++, src++;
+		size--;
+	}
+
+	if (size & 1) {
+		byte_align(dest + size - 1, src + size - 1);
+		size--;
+	}
+
+	if (src & 1) {
+		unsigned char *s = (unsigned char *)src;
+		volatile u16 *d = (unsigned short *)dest;
+
+		size >>= 1;
+
+		while (size--) {
+			*d++ = s[0] | (s[1] << 8);
+			s += 2;
+		}
+	}
+
+	else {
+		u16 *s = (u16 *)src;
+		volatile u16 *d = (unsigned short *)dest;
+
+		size >>= 1;
+
+		while (size--) { *d++ = *s++; }
+	}
+}
+#endif
 
 static inline int _memcmp(u16 *dest, u16 *src, int size)
 {
 	int i = 0;
 
 	if (!(*onedram_sem)) {
-		printk("[OneDRAM] (%s) memory access without semaphore!: %d\n", __func__, *onedram_sem);
+		printk("[OneDRAM] (%s) memory access without semaphore!: %d\n", *onedram_sem);
 		return 1;
 	}
 
@@ -376,6 +424,11 @@ static inline int READ_FROM_DPRAM_VERIFY(void *dest, u32 src, int size)
 	
 	return -1;
 
+}
+
+static void send_interrupt_to_phone(u16 irq_mask)
+{
+	*onedram_mailboxBA = irq_mask;
 }
 
 #ifdef _DPRAM_DEBUG_HEXDUMP
@@ -540,6 +593,7 @@ static int dpram_read(dpram_device_t *device, const u16 non_cmd)
 {
 	int retval = 0;
 	int size = 0;
+	int ret = 0;
 	u16 head, tail, up_tail;
 
 	if(!onedram_get_semaphore(__func__)) 
@@ -622,6 +676,14 @@ static int dpram_read(dpram_device_t *device, const u16 non_cmd)
 
 	return retval;
 	
+}
+
+static void print_onedram_status(void)
+{
+	printk("onedram semaphore: %d(%s)\n", *onedram_sem, *onedram_sem ? "PDA" : "PHONE");
+	printk("onedram mailboxAB: %x\n", *onedram_mailboxAB);
+	printk("onedram mailboxBA: %x\n", *onedram_mailboxBA);
+	printk("phone active pin : %s\n", (dpram_phone_getstatus() ? "ACTIVE" : "INACTIVE"));
 }
 
 static int onedram_get_semaphore(const char *func)
@@ -761,34 +823,6 @@ static int ReadPhoneFile(
 	unsigned long Dbl_Length, 
 	unsigned long Total_length)
 {
-	struct mtd_info *mtd;
-	size_t retlen = 0;
-	int ret;
-
-	mtd = get_mtd_device_nm("modem");
-	if (!mtd) {
-		printk("Cannot find modem partition.\n");
-		return FALSE;
-	}
-
-	if (Total_length > mtd->size) {
-		printk("Requested length bigger than modem partition.\n");
-		put_mtd_device(mtd);
-		return FALSE;
-	}
-
-	ret = mtd->read(mtd, 0, Total_length, &retlen, ImageBuffer);
-	if (ret || retlen != Total_length) {
-		printk("Failed to read modem partition.\n");
-		put_mtd_device(mtd);
-		return FALSE;
-	}
-
-	put_mtd_device(mtd);
-
-	return TRUE;
-
-#if 0
 	int   nRet;
 	XSRPartEntry stPartEntry;
 	unsigned int nVol = 0;
@@ -883,7 +917,6 @@ static int ReadPhoneFile(
 		printk("# FlashRead : BML_Read is failed\n");
 		return FALSE;
 	}
-#endif
 
 	return TRUE;
 }
@@ -1005,34 +1038,6 @@ static void dpram_phone_image_load(void)
 	
 static void dpram_nvdata_load(struct _param_nv *param)
 {
-	struct mtd_info *mtd;
-	size_t retlen = 0;
-	int ret;
-
-	mtd = get_mtd_device_nm("dgs");
-	if (!mtd) {
-		printk("Cannot find dgs partition.\n");
-		return;
-	}
-
-	ret = mtd->read(mtd, 5*mtd->writesize,
-				DPRAM_DGS_INFO_BLOCK_SIZE, &retlen, aDGSBuf);
-	if (ret || retlen != DPRAM_DGS_INFO_BLOCK_SIZE) {
-		printk("Failed to read dgs block.\n");
-		put_mtd_device(mtd);
-		return;
-	}
-
-	put_mtd_device(mtd);
-
-	if(*onedram_sem) {
-		WRITE_TO_DPRAM( 0xF80000 - 0x5000, param->addr, param->size);
-		WRITE_TO_DPRAM( DPRAM_DGS_INFO_BLOCK_OFFSET, aDGSBuf, DPRAM_DGS_INFO_BLOCK_SIZE);   
-        } else {
-		printk("[OneDRAM] %s failed.. sem: %d\n", __func__, *onedram_sem);
-	}
-
-#if 0
 	// printk(" +---------------------------------------------+\n");
 	printk(" |                  LOAD NVDATA                |\n");
 	// printk(" +---------------------------------------------+\n");
@@ -1091,12 +1096,10 @@ static void dpram_nvdata_load(struct _param_nv *param)
 	}
 	else
 		dprintk("CP DUMP MODE !!! \n");
-#endif
 }
 	
 static void dpram_phone_power_on(void)
 {
-
 	if( phone_power_state ) {
 		printk("[OneDram] phone off (before phone power on).\n");
 		gpio_set_value(GPIO_PHONE_ON, GPIO_LEVEL_LOW);
@@ -1349,10 +1352,26 @@ static void dpram_phone_reset(void)
 	mdelay(200);
 }
 
+static void dpram_mem_rw(struct _mem_param *param)
+{
+#if 0
+	/* @LDK@ write */
+	if (param->dir) {
+		WRITE_TO_DPRAM(param->addr, (void *)&param->data, sizeof(param->data));
+	}
+
+	/* @LDK@ read */
+	else {
+		READ_FROM_DPRAM((void *)&param->data, param->addr, sizeof(param->data));
+	}
+#endif
+}
+
 static int dpram_phone_ramdump_on(void)
 {
 	const u16 rdump_flag1 = 0x554C;
 	const u16 rdump_flag2 = 0x454D;
+	const u16 temp1, temp2;
 	
 	dprintk("[OneDRAM] Ramdump ON.\n");
 
@@ -1395,6 +1414,7 @@ static int dpram_phone_ramdump_off(void)
 {
 	const u16 rdump_flag1 = 0x00aa;
 	const u16 rdump_flag2 = 0x0001;
+	const u16 temp1, temp2;
 
 	dprintk("[OneDRAM] Ramdump OFF.\n");
 	
@@ -1434,12 +1454,6 @@ static int dpram_phone_ramdump_off(void)
 /* CP Dump Logic */
 static void dpram_cp_dump(dump_order order)
 {
-	printk(	"Called %s which is currently unimplemented."
-		"(See %s line %d.)\n", __func__, __FILE__, __LINE__); 
-
-	// TODO: Implement this using MTD API
-	// NOTE: Is it needed?
-#if 0
     int                   nErr = BML_SUCCESS;
     unsigned int          nVol = 0;
     
@@ -1609,7 +1623,6 @@ static void dpram_cp_dump(dump_order order)
 	}
 
 	dprintk("BML Operation Done!!!\n");
-#endif
 }
 
 #ifdef CONFIG_PROC_FS
@@ -1619,6 +1632,9 @@ static int dpram_read_proc(char *page, char **start, off_t off,
 	char *p = page;
 	int len;
 
+	u16 magic, enable;
+	u16 fmt_in_head, fmt_in_tail, fmt_out_head, fmt_out_tail;
+	u16 raw_in_head, raw_in_tail, raw_out_head, raw_out_tail;
 	u16 in_interrupt = 0, out_interrupt = 0;
 
 	int foh, fot, roh, rot, sem;
@@ -1983,7 +1999,6 @@ static void res_ack_tasklet_handler(unsigned long data)
 	if (device && device->serial.tty) {
 		struct tty_struct *tty = device->serial.tty;
 
-		//Xmister
 		if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 				tty->ldisc->ops->write_wakeup) {
 			(tty->ldisc->ops->write_wakeup)(tty);
@@ -2102,6 +2117,13 @@ static void cmd_emer_down_handler(void)
 	/* TODO: add your codes here.. */
 }
 
+static void cmd_smp_req_handler(void)
+{
+	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REP);
+	if(return_onedram_semaphore(__func__))
+		*onedram_mailboxBA = cmd;
+}
+
 static void cmd_smp_rep_handler(void)
 {
 	/* TODO: add your codes here.. */
@@ -2174,7 +2196,7 @@ static void non_command_handler(u16 non_cmd)
 	}
 */
     if(!onedram_get_semaphore(__func__)) 
-		return;
+		return -1;
 
 	READ_FROM_DPRAM_VERIFY(&head, DPRAM_PHONE2PDA_FORMATTED_HEAD_ADDRESS, sizeof(head));
 	READ_FROM_DPRAM_VERIFY(&tail, DPRAM_PHONE2PDA_FORMATTED_TAIL_ADDRESS, sizeof(tail));
@@ -2272,10 +2294,11 @@ static irqreturn_t phone_active_irq_handler(int irq, void *dev_id)
 {
 	// printk("  - [IRQ_CHECK] IRQ_PHONE_ACTIVE is Detected, level: %s\n", gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW");
 
+#ifdef _ENABLE_ERROR_DEVICE
 	if((phone_sync) && (!gpio_get_value(GPIO_PHONE_ACTIVE)))
 	{
 		char buf[DPRAM_ERR_MSG_LEN];
-	  unsigned long flags;
+		unsigned long flags;
 
 		phone_sync = 0;
 
@@ -2295,12 +2318,15 @@ static irqreturn_t phone_active_irq_handler(int irq, void *dev_id)
 		wake_up_interruptible(&dpram_err_wait_q);
 		kill_fasync(&dpram_err_async_q, SIGIO, POLL_IN);
 	}
+#endif
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t sim_detect_irq_handler(int irq, void *dev_id)
 {
+#ifdef _ENABLE_ERROR_DEVICE
 	char buf[DPRAM_ERR_MSG_LEN];
+#endif
 	unsigned long flags;
 
 	int new_sim_state = 0;
@@ -2311,6 +2337,7 @@ static irqreturn_t sim_detect_irq_handler(int irq, void *dev_id)
 	if (new_sim_state != sim_state)
 	{
 	
+#ifdef _ENABLE_ERROR_DEVICE
     	if (!new_sim_state)
     	{
     	    memset((void *)buf, 0, sizeof (buf));
@@ -2330,6 +2357,7 @@ static irqreturn_t sim_detect_irq_handler(int irq, void *dev_id)
     	    kill_fasync(&dpram_err_async_q, SIGIO, POLL_IN);
     	}
         else
+#endif        
         {
             for( i = 0 ; i < 3 ; i++ ) {
 				mdelay(7);
@@ -2343,6 +2371,7 @@ static irqreturn_t sim_detect_irq_handler(int irq, void *dev_id)
 					return IRQ_HANDLED;
             }
 			
+#ifdef _ENABLE_ERROR_DEVICE
             memset((void *)buf, 0, sizeof (buf));
     	    buf[0] = '2';
     	    buf[1] = ' ';
@@ -2358,11 +2387,17 @@ static irqreturn_t sim_detect_irq_handler(int irq, void *dev_id)
     
     	    wake_up_interruptible(&dpram_err_wait_q);
     	    kill_fasync(&dpram_err_async_q, SIGIO, POLL_IN);
+#endif
         }
 
 		sim_state = new_sim_state;
 	}
 	
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t pm_irq_handler(int irq, void *dev_id)
+{
 	return IRQ_HANDLED;
 }
 
@@ -2484,7 +2519,7 @@ static void init_devices(void)
 	int i;
 
 	for (i = 0; i < MAX_INDEX; i++) {
-		sema_init(&dpram_table[i].serial.sem, 1);
+		init_MUTEX(&dpram_table[i].serial.sem);
 
 		dpram_table[i].serial.open_count = 0;
 		dpram_table[i].serial.tty = NULL;
@@ -2493,6 +2528,8 @@ static void init_devices(void)
 
 static void init_hw_setting(void)
 {
+	u32 mask;
+
 	/* initial pin settings - dpram driver control */
 	s3c_gpio_cfgpin(GPIO_PHONE_ACTIVE, S3C_GPIO_SFN(GPIO_PHONE_ACTIVE_AF));
 	s3c_gpio_setpull(GPIO_PHONE_ACTIVE, S3C_GPIO_PULL_NONE); 
@@ -2521,35 +2558,35 @@ static void init_hw_setting(void)
 	s3c_gpio_setpull(GPIO_FLM_TXD, S3C_GPIO_PULL_NONE); 
 
 	if (gpio_is_valid(GPIO_PHONE_ON)) {
-		if (gpio_request(GPIO_PHONE_ON, GPIO_LABEL(GPIO_PHONE_ON)))
+		if (gpio_request(GPIO_PHONE_ON, S3C_GPIO_LAVEL(GPIO_PHONE_ON)))
 			printk(KERN_ERR "Filed to request GPIO_PHONE_ON!\n");
 		gpio_direction_output(GPIO_PHONE_ON, GPIO_LEVEL_LOW);
 	}
 	s3c_gpio_setpull(GPIO_PHONE_ON, S3C_GPIO_PULL_NONE); 
 
 	if (gpio_is_valid(GPIO_CP_BOOT_SEL)) {
-		if (gpio_request(GPIO_CP_BOOT_SEL, GPIO_LABEL(GPIO_CP_BOOT_SEL)))
+		if (gpio_request(GPIO_CP_BOOT_SEL, S3C_GPIO_LAVEL(GPIO_CP_BOOT_SEL)))
 			printk(KERN_ERR "Filed to request GPIO_CP_BOOT_SEL!\n");
 		gpio_direction_output(GPIO_CP_BOOT_SEL, GPIO_LEVEL_LOW);
 	}
 	s3c_gpio_setpull(GPIO_CP_BOOT_SEL, S3C_GPIO_PULL_NONE); 
 
 	if (gpio_is_valid(GPIO_USIM_BOOT)) {
-		if (gpio_request(GPIO_USIM_BOOT, GPIO_LABEL(GPIO_USIM_BOOT)))
+		if (gpio_request(GPIO_USIM_BOOT, S3C_GPIO_LAVEL(GPIO_USIM_BOOT)))
 			printk(KERN_ERR "Filed to request GPIO_USIM_BOOT!\n");
 		gpio_direction_output(GPIO_USIM_BOOT, GPIO_LEVEL_LOW);
 	}
 	s3c_gpio_setpull(GPIO_USIM_BOOT, S3C_GPIO_PULL_NONE); 
 
 	if (gpio_is_valid(GPIO_PHONE_RST_N)) {
-		if (gpio_request(GPIO_PHONE_RST_N, GPIO_LABEL(GPIO_PHONE_RST_N)))
+		if (gpio_request(GPIO_PHONE_RST_N, S3C_GPIO_LAVEL(GPIO_PHONE_RST_N)))
 			printk(KERN_ERR "Filed to request GPIO_PHONE_RST_N!\n");
 		gpio_direction_output(GPIO_PHONE_RST_N, GPIO_LEVEL_LOW);
 	}
 	s3c_gpio_setpull(GPIO_PHONE_RST_N, S3C_GPIO_PULL_NONE); 
 
 	if (gpio_is_valid(GPIO_PDA_ACTIVE)) {
-		if (gpio_request(GPIO_PDA_ACTIVE, GPIO_LABEL(GPIO_PDA_ACTIVE)))
+		if (gpio_request(GPIO_PDA_ACTIVE, S3C_GPIO_LAVEL(GPIO_PDA_ACTIVE)))
 			printk(KERN_ERR "Filed to request GPIO_PDA_ACTIVE!\n");
 		gpio_direction_output(GPIO_PDA_ACTIVE, GPIO_LEVEL_HIGH);
 	}

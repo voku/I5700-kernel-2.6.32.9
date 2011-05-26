@@ -1093,7 +1093,7 @@ int s3cfb_init_registers(s3c_fb_info_t *fbi)
 	}
 	#endif
 
-#if defined(S3C_FB_DISPLAY_LOGO)
+#if defined(S3C_FB_DISPLAY_PROGRESS)
 	s3cfb_display_logo(win_num);
 #endif
 

@@ -438,6 +438,7 @@ static inline int dpram_flush_rx(struct file *filp, size_t count)
 static int dpram_thread(void *data)
 {
 	int ret = 0;
+	unsigned long flag;
 	struct file *filp;
    struct sched_param schedpar;
 
@@ -693,16 +694,26 @@ static void vnet_tx_timeout(struct net_device *net)
 	netif_wake_queue(net);
 }
 
+static const struct net_device_ops ops = {
+    .ndo_open		= vnet_open,
+    .ndo_stop		= vnet_stop,
+    .ndo_start_xmit	= vnet_start_xmit,
+    .ndo_get_stats	= vnet_get_stats,
+    .ndo_tx_timeout	= vnet_tx_timeout,
+};
+
 static void vnet_setup(struct net_device *dev)
 {
-	static struct net_device_ops ops = {
-		.ndo_open	= vnet_open,
-		.ndo_stop	= vnet_stop,
-		.ndo_start_xmit	= vnet_start_xmit,
-		.ndo_get_stats	= vnet_get_stats,
-		.ndo_tx_timeout	= vnet_tx_timeout
-	};
-	dev->netdev_ops		= &ops;
+	/*
+	net_device_ops *ops = dev->netdev_ops;
+	
+	ops->ndo_open		= vnet_open;
+	ops->ndo_stop		= vnet_stop;
+	ops->ndo_start_xmit	= vnet_start_xmit;
+	ops->ndo_get_stats	= vnet_get_stats;
+	ops->ndo_tx_timeout	= vnet_tx_timeout;
+	*/
+	dev->netdev_ops         = &ops;
 	dev->type		= ARPHRD_PPP;
 	dev->hard_header_len 	= 0;
 	dev->mtu		= MAX_PDP_DATA_LEN;
@@ -738,6 +749,7 @@ static struct net_device *vnet_add_dev(void *priv)
    DPRINTK(2, "END\n");
 	return dev;
 }
+
 static void vnet_del_dev(struct net_device *net)
 {
 	unregister_netdev(net);
@@ -831,6 +843,7 @@ static int vs_write(struct tty_struct *tty,
 		const unsigned char *buf, int count)
 {
 	int ret;
+	unsigned long flag;
    struct pdp_info *dev;
 
    DPRINTK(2, "BEGIN\n");
@@ -934,6 +947,10 @@ static int vs_ioctl(struct tty_struct *tty, struct file *file,
 		    unsigned int cmd, unsigned long arg)
 {
 	return -ENOIOCTLCMD;
+}
+
+static void vs_break_ctl(struct tty_struct *tty, int break_state)
+{
 }
 
 static struct tty_operations multipdp_tty_ops = {
@@ -1040,7 +1057,7 @@ static inline int pdp_add_dev(struct pdp_info *dev)
 			return slot;
 		}
 	}
-   EPRINTK("pdp_add_dev() Error ..%d There is no space to make\n", dev->id);
+   EPRINTK("pdp_add_dev() Error ..%d There is no space to make %d \n", dev->id);
 	return -ENOSPC;
 }
 
@@ -1248,7 +1265,7 @@ static int pdp_activate(pdp_arg_t *pdp_arg, unsigned type, unsigned flags)
 		DPRINTK(1, "%s(id: %u) network device created\n", 
 			net->name, dev->id);
 	} else if (type == DEV_TYPE_SERIAL) {
-		sema_init(&dev->vs_dev.write_lock, 0);
+		init_MUTEX(&dev->vs_dev.write_lock);
 		strcpy(dev->vs_dev.tty_name, pdp_arg->ifname);
 
 		ret = vs_add_dev(dev);
@@ -1268,8 +1285,12 @@ static int pdp_activate(pdp_arg_t *pdp_arg, unsigned type, unsigned flags)
 		}
 		mutex_unlock(&pdp_lock);
 
-		DPRINTK(1, "%s(id: %u) serial device is created.\n",
-			get_tty_driver_by_id(dev)->name, dev->id);
+		{
+			struct tty_driver * tty_driver = get_tty_driver_by_id(dev);
+
+			DPRINTK(1, "%s(id: %u) serial device is created.\n",
+					tty_driver->name, dev->id);
+		}
 	}
 
    DPRINTK(2, "END\n");
@@ -1301,12 +1322,12 @@ static int pdp_deactivate(pdp_arg_t *pdp_arg, int force)
 	dev = pdp_get_dev(pdp_arg->id);
 
 	if (dev == NULL) {
-		EPRINTK("not found id: %u\n", pdp_arg->id);
+		EPRINTK(1, "not found id: %u\n", pdp_arg->id);
 		mutex_unlock(&pdp_lock);
 		return -EINVAL;
 	}
 	if (!force && dev->flags & DEV_FLAG_STICKY) {
-		EPRINTK("sticky id: %u\n", pdp_arg->id);
+		EPRINTK(1, "sticky id: %u\n", pdp_arg->id);
 		mutex_unlock(&pdp_lock);
 		return -EACCES;
 	}
@@ -1319,8 +1340,10 @@ static int pdp_deactivate(pdp_arg_t *pdp_arg, int force)
 			dev->vn_dev.net->name, dev->id);
 		vnet_del_dev(dev->vn_dev.net);
 	} else if (dev->type == DEV_TYPE_SERIAL) {
+		struct tty_driver * tty_driver = get_tty_driver_by_id(dev);
+
 		DPRINTK(1, "%s(id: %u) serial device removed\n",
-				get_tty_driver_by_id(dev)->name, dev->id);
+				tty_driver->name, dev->id);
 		vs_del_dev(dev);
 	}
 	kfree(dev);
@@ -1338,12 +1361,14 @@ static void __exit pdp_cleanup(void)
 		dev = pdp_remove_slot(slot);
 		if (dev) {
 			if (dev->type == DEV_TYPE_NET) {
-				DPRINTK("%s(id: %u) network device removed\n", 
+				DPRINTK(1, "%s(id: %u) network device removed\n", 
 					dev->vn_dev.net->name, dev->id);
 				vnet_del_dev(dev->vn_dev.net);
 			} else if (dev->type == DEV_TYPE_SERIAL) {
-				DPRINTK("%s(id: %u) serial device removed\n",
-				get_tty_driver_by_id(dev)->name, dev->id);
+				struct tty_driver * tty_driver = get_tty_driver_by_id(dev);
+
+				DPRINTK(1, "%s(id: %u) serial device removed\n",
+						tty_driver->name, dev->id);
 
 				vs_del_dev(dev);
 			}
@@ -1367,7 +1392,7 @@ static int pdp_adjust(const int adjust)
  * App. Interfece Device functions
  */
 
-static long multipdp_ioctl(struct file *file, 
+static int multipdp_ioctl(struct inode *inode, struct file *file, 
 			      unsigned int cmd, unsigned long arg)
 {
 	int ret, adjust;
@@ -1415,7 +1440,7 @@ static long multipdp_ioctl(struct file *file,
 
 static struct file_operations multipdp_fops = {
 	.owner =	THIS_MODULE,
-	.compat_ioctl =	multipdp_ioctl,
+	.ioctl =	multipdp_ioctl,
 	.llseek =	no_llseek,
 };
 
@@ -1473,6 +1498,8 @@ static int __init multipdp_init(void)
 {
 	int ret;
 
+	wake_lock_init(&pdp_wake_lock, WAKE_LOCK_SUSPEND, "MULTI_PDP");
+
 	pdp_arg_t pdp_args[5] = {
 		{ .id = 1, .ifname = "ttyCSD" },
 		{ .id = 8, .ifname = "ttyEFS" },
@@ -1481,7 +1508,6 @@ static int __init multipdp_init(void)
 		{ .id = 25, .ifname = "ttySMD" },
 	};
 
-	wake_lock_init(&pdp_wake_lock, WAKE_LOCK_SUSPEND, "MULTI_PDP");
 
     prx_buf = vmalloc(BUFFER_SIZE_FOR_CAL);
     if (prx_buf == NULL) {
@@ -1527,6 +1553,7 @@ err1:
 	/* undo serial device for Circuit Switched Data */
 //	pdp_deactivate(&pdp_arg, 1);
 
+err0:
 	/* kill DPRAM I/O thread */
 	if (dpram_task) {
 		send_sig(SIGUSR1, dpram_task, 1);

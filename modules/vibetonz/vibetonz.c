@@ -1,8 +1,6 @@
 /****************************************************************************
 **
 ** COPYRIGHT(C)	: Samsung Electronics Co.Ltd, 2006-2015 ALL RIGHTS RESERVED
-** Modified by Gabriel-LG (l.gorter@gmail.com)
-** Finally cleaned and modified by Tomasz Figa <tomasz.figa at gmail.com>
 **
 *****************************************************************************/
 #include <linux/module.h>
@@ -10,21 +8,16 @@
 #include <linux/hrtimer.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
-#include <linux/pwm.h>
-#include <linux/mutex.h>
+#include <linux/workqueue.h>
 
 #include <asm/io.h>
 #include <mach/hardware.h>
-
-#ifdef CONFIG_MACH_GT_I5700
-#include <mach/gt_i5700.h>
-#endif
-
 #include <plat/gpio-cfg.h>
 #include <linux/delay.h>
-#include "timed_output.h"
 
-#define GPIO_LABEL(gpio)	(#gpio)
+#include <linux/timed_output.h>
+
+//#include "vibetonz.h"
 
 /*********** for debug **********************************************************/
 #if 0 
@@ -34,45 +27,81 @@
 #endif
 /*******************************************************************************/
 
-#define VIBRATOR_DEF_HZ		22222	// 128 * actuator resonant frequency
-#define VIBRATOR_DEF_DUTY	33	// weak vibrations (use 1 for strong)
-#define VIBRATOR_MAX_TIMEOUT	5000
-
-static int pwm_period = (NSEC_PER_SEC / VIBRATOR_DEF_HZ);
-static int pwm_duty = VIBRATOR_DEF_DUTY;
-
-static struct pwm_device *vibetonz_pwm;
+#define OFFSET_VIBRATOR_ON      (0x1 << 0)
 
 static struct hrtimer timer;
-static struct timed_output_dev timed_output_vt;
-static DEFINE_MUTEX(vib_mutex);
+
+static int max_timeout = 5000;
+static int vibrator_value = 0;
+static spinlock_t vib_spin_lock;
+static struct work_struct work_vib;
+static struct workqueue_struct *vib_wq;
+static int vib_state = 0;
+
+extern int s3c6410_timer_setup (int channel, int usec, unsigned long g_tcnt, unsigned long g_tcmp);
+
+#if defined (CONFIG_MACH_MAX)
+extern int s3c6410_pwm_stop (int channel);
+#endif
+
+#if defined(CONFIG_MACH_SPICA) || defined(CONFIG_MACH_INSTINCTQ) || defined(CONFIG_MACH_INFOBOWLQ)
+extern void s3c_bat_set_compensation_for_drv(int mode,int offset);
+#endif
+
 
 static int set_vibetonz(int timeout)
-{	
-	int duty = timeout >> 16;
+{
+	
+	if(!timeout) {
 
-	timeout &= 0xFFFF;
-	if (duty <= 0)
-		duty = pwm_duty;
-	if (duty > 100)
-		duty = 100;
+		printk("[VIBETONZ] reserved VIBRATOR_DISABLE\n");
+		gpio_set_value(GPIO_VIB_EN, GPIO_LEVEL_LOW);
+		gpio_direction_input(GPIO_VIB_EN);
+		s3c_gpio_setpull(GPIO_VIB_EN,S3C_GPIO_PULL_DOWN);
 
-	if(!timeout) {	
-		gpio_set_value(GPIO_VIB_EN, 0);
-		pwm_disable(vibetonz_pwm);
-	} else {
-		pwm_config(vibetonz_pwm, (duty*pwm_period) / 100, pwm_period);
-		pwm_enable(vibetonz_pwm);
-		gpio_set_value(GPIO_VIB_EN, 1);
+#if defined (CONFIG_MACH_MAX)
+		s3c6410_pwm_stop(1);
+#endif
+
+#if defined(CONFIG_MACH_SPICA) || defined(CONFIG_MACH_INSTINCTQ) || defined(CONFIG_MACH_INFOBOWLQ)
+		s3c_bat_set_compensation_for_drv(0,OFFSET_VIBRATOR_ON);
+#endif
+	}
+	else {
+
+#ifdef CONFIG_MACH_VINSQ
+		s3c6410_timer_setup(1,10,290,3);
+#else
+		s3c6410_timer_setup(1,10,300,3);
+#endif
+		printk("[VIBETONZ] reserved VIBRATOR_ENABLE\n");
+		gpio_direction_output(GPIO_VIB_EN, GPIO_LEVEL_LOW);
+		mdelay(1);
+		gpio_set_value(GPIO_VIB_EN, GPIO_LEVEL_HIGH);
+#if defined(CONFIG_MACH_SPICA) || defined(CONFIG_MACH_INSTINCTQ) || defined(CONFIG_MACH_INFOBOWLQ)
+		s3c_bat_set_compensation_for_drv(1,OFFSET_VIBRATOR_ON);
+#endif
 	}
 
-	return timeout;
+	vibrator_value = timeout;
+
+	
+	return 0;
+}
+
+static void vib_work_func(struct work_struct *work)
+{
+   	gprintk("[VIBETONZ] %s :",__func__);
+	set_vibetonz(vib_state);
 }
 
 static enum hrtimer_restart vibetonz_timer_func(struct hrtimer *timer)
 {
-	set_vibetonz(0);
 
+	gprintk("[VIBETONZ] %s : \n",__func__);
+	vib_state = 0;
+	queue_work(vib_wq,&work_vib);
+	//set_vibetonz(0);
 	return HRTIMER_NORESTART;
 }
 
@@ -80,159 +109,110 @@ static int get_time_for_vibetonz(struct timed_output_dev *dev)
 {
 	int remaining;
 
+
 	if (hrtimer_active(&timer)) {
 		ktime_t r = hrtimer_get_remaining(&timer);
 		remaining = r.tv.sec * 1000 + r.tv.nsec / 1000000;
-	} else {
+	} else
 		remaining = 0;
-	}
+
+	//if (vibrator_value ==-1)
+	//	remaining = -1;
 
 	return remaining;
+
 }
-static void enable_vibetonz_from_user(struct timed_output_dev *dev, int value)
+static void enable_vibetonz_from_user(struct timed_output_dev *dev,int value)
 {
-	if(value == 0)
-		return;
+	unsigned long flags;
 
-	mutex_lock(&vib_mutex);
-
+	printk("[VIBETONZ] %s : time = %d msec \n",__func__,value);
+	spin_lock_irqsave(&vib_spin_lock, flags);
 	hrtimer_cancel(&timer);
 
-	value = set_vibetonz(value);
+	
+	//set_vibetonz(value);
+	//vibrator_value = value;
 
-	if (value > VIBRATOR_MAX_TIMEOUT)
-		value = VIBRATOR_MAX_TIMEOUT;
+	if (value > 0) 
+	{
+//		if (value > max_timeout)
+//			value = max_timeout;
+		vib_state = 1;
 
-	hrtimer_start(&timer, ktime_set(value / MSEC_PER_SEC,
-		(value % MSEC_PER_SEC) * NSEC_PER_MSEC), HRTIMER_MODE_REL);
-
-	mutex_unlock(&vib_mutex);
-}
-
-/* Frequency */
-
-static ssize_t freq_store(struct device *aDevice, struct device_attribute *aAttribute, const char *aBuf, size_t aSize)
-{
-	if(sscanf(aBuf, "%d", &pwm_period)) {
-		pwm_period = NSEC_PER_SEC / pwm_period;
-		enable_vibetonz_from_user(&timed_output_vt, 1000);
+		hrtimer_start(&timer,
+						ktime_set(value / 1000, (value % 1000) * 1000000),
+						HRTIMER_MODE_REL);
+		//vibrator_value = 0;
 	}
+	else
+		vib_state = 0;
 
-	return aSize;
+	spin_unlock_irqrestore(&vib_spin_lock, flags);
+	queue_work(vib_wq,&work_vib);
+
 }
 
-static ssize_t freq_show(struct device *aDevice, struct device_attribute *aAttribute, char *aBuf)
-{
-	return sprintf(aBuf, "%ld\n", NSEC_PER_SEC / pwm_period);
-}
-
-static DEVICE_ATTR(freq, S_IRUGO | S_IWUSR, freq_show, freq_store);
-
-/* Duty */
-
-static ssize_t duty_store(struct device *aDevice, struct device_attribute *aAttribute, const char *aBuf, size_t aSize)
-{
-	if(sscanf(aBuf, "%d", &pwm_duty)) {
-		if (pwm_duty < 1)
-			pwm_duty = 1;
-		if (pwm_duty > 100)
-			pwm_duty = 100;
-	}
-
-	return aSize;
-}
-
-static ssize_t duty_show(struct device *aDevice, struct device_attribute *aAttribute, char *aBuf)
-{
-	return sprintf(aBuf, "%d\n", pwm_duty);
-}
-
-static DEVICE_ATTR(duty, S_IRUGO | S_IWUSR, duty_show, duty_store);
-
-/* Timed output */
 
 static struct timed_output_dev timed_output_vt = {
 	.name     = "vibrator",
 	.get_time = get_time_for_vibetonz,
 	.enable   = enable_vibetonz_from_user,
 };
-
-static int vibetonz_start(void)
+static void vibetonz_start(void)
 {
 	int ret = 0;
+
+	printk("[VIBETONZ] %s : \n",__func__);
+	spin_lock_init(&vib_spin_lock);
+
 
 	/* hrtimer settings */
 	hrtimer_init(&timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	timer.function = vibetonz_timer_func;
 
-	vibetonz_pwm = pwm_request(1, "vibetonz");
-	if (IS_ERR(vibetonz_pwm)) {
-		printk(KERN_ERR "Failed to request PWM timer 1 (%ld)\n",
-							PTR_ERR(vibetonz_pwm));
-		return -ENOENT;
-	}
-
-	/* pwm timer settings */
-	pwm_config(vibetonz_pwm, (pwm_duty*pwm_period)/100, pwm_period);
 
 	if (gpio_is_valid(GPIO_VIB_EN)) {
-		if (gpio_request(GPIO_VIB_EN, GPIO_LABEL(GPIO_VIB_EN))) {
+		if (gpio_request(GPIO_VIB_EN, S3C_GPIO_LAVEL(GPIO_VIB_EN))) 
 			printk(KERN_ERR "Failed to request GPIO_VIB_EN!\n");
-			pwm_free(vibetonz_pwm);
-			return -EBUSY;
-		}
-		pwm_enable(vibetonz_pwm);
-		gpio_direction_output(GPIO_VIB_EN,1);
+		gpio_direction_output(GPIO_VIB_EN,0);
 		mdelay(10);
-		gpio_set_value(GPIO_VIB_EN, 0);
-		pwm_disable(vibetonz_pwm);
+		gpio_set_value(GPIO_VIB_EN, GPIO_LEVEL_LOW);
 	}
 	s3c_gpio_setpull(GPIO_VIB_EN, S3C_GPIO_PULL_NONE);
 
+	/*Initialising work-queue*/
+	vib_wq = create_singlethread_workqueue("vib_wq");
+	if(!vib_wq){
+		printk(KERN_ERR "Not enough memory for vibrator workqueue\n");
+	}	
+	INIT_WORK(&work_vib,vib_work_func);
+	
+	/* pwm timer settings */
+#ifdef CONFIG_MACH_VINSQ
+	s3c6410_timer_setup(1,10,290,3);
+#else
+	s3c6410_timer_setup(1,10,300,3);
+#endif
+	
 	/* timed_output_device settings */
 	ret = timed_output_dev_register(&timed_output_vt);
-	if(ret) {
+	if(ret)
 		printk(KERN_ERR "[VIBETONZ] timed_output_dev_register is fail \n");
-		pwm_free(vibetonz_pwm);
-		gpio_free(GPIO_VIB_EN);
-		return -EINVAL;
-	}
 
-	ret = device_create_file(timed_output_vt.dev, &dev_attr_freq);
-	if(ret) {
-		printk(KERN_ERR "[VIBETONZ] failed to add freq attribute\n");
-		timed_output_dev_unregister(&timed_output_vt);
-		pwm_free(vibetonz_pwm);
-		gpio_free(GPIO_VIB_EN);
-		return -EINVAL;
-	}
 	
-	ret = device_create_file(timed_output_vt.dev, &dev_attr_duty);
-	if(ret) {
-		printk(KERN_ERR "[VIBETONZ] failed to add duty attribute\n");
-		timed_output_dev_unregister(&timed_output_vt);
-		pwm_free(vibetonz_pwm);
-		gpio_free(GPIO_VIB_EN);
-		return -EINVAL;
-	}
-	
-	return 0;
 }
 
 
 static void vibetonz_end(void)
 {
 	printk("[VIBETONZ] %s \n",__func__);
-	device_remove_file(timed_output_vt.dev, &dev_attr_freq);
-	timed_output_dev_unregister(&timed_output_vt);
-	pwm_free(vibetonz_pwm);
-	gpio_free(GPIO_VIB_EN);
+	destroy_workqueue(vib_wq);
 }
 
-static int __init vibetonz_init(void)
+static void __init vibetonz_init(void)
 {
-	
-	return vibetonz_start();
+	vibetonz_start();
 }
 
 
@@ -247,3 +227,4 @@ module_exit(vibetonz_exit);
 MODULE_AUTHOR("SAMSUNG");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("vibetonz control interface");
+

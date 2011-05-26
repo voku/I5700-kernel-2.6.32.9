@@ -85,6 +85,7 @@ int max_threads;		/* tunable limit on nr_threads */
 DEFINE_PER_CPU(unsigned long, process_counts) = 0;
 
 __cacheline_aligned DEFINE_RWLOCK(tasklist_lock);  /* outer */
+EXPORT_SYMBOL_GPL(tasklist_lock);
 
 int nr_processes(void)
 {
@@ -140,7 +141,6 @@ static struct kmem_cache *mm_cachep;
 
 /* Notifier list called when a task struct is freed */
 static ATOMIC_NOTIFIER_HEAD(task_free_notifier);
-
 
 static void account_kernel_stack(struct thread_info *ti, int account)
 {
@@ -294,7 +294,7 @@ out:
 #ifdef CONFIG_MMU
 static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 {
-	struct vm_area_struct *mpnt, *tmp, **pprev;
+	struct vm_area_struct *mpnt, *tmp, *prev, **pprev;
 	struct rb_node **rb_link, *rb_parent;
 	int retval;
 	unsigned long charge;
@@ -322,6 +322,7 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 	if (retval)
 		goto out;
 
+	prev = NULL;
 	for (mpnt = oldmm->mmap; mpnt; mpnt = mpnt->vm_next) {
 		struct file *file;
 
@@ -350,7 +351,7 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 		vma_set_policy(tmp, pol);
 		tmp->vm_flags &= ~VM_LOCKED;
 		tmp->vm_mm = mm;
-		tmp->vm_next = NULL;
+		tmp->vm_next = tmp->vm_prev = NULL;
 		anon_vma_link(tmp);
 		file = tmp->vm_file;
 		if (file) {
@@ -384,6 +385,8 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 		 */
 		*pprev = tmp;
 		pprev = &tmp->vm_next;
+		tmp->vm_prev = prev;
+		prev = tmp;
 
 		__vma_link_rb(mm, tmp, rb_link, rb_parent);
 		rb_link = &tmp->vm_rb.rb_right;
@@ -901,6 +904,9 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	sig->utime = sig->stime = sig->cutime = sig->cstime = cputime_zero;
 	sig->gtime = cputime_zero;
 	sig->cgtime = cputime_zero;
+#ifndef CONFIG_VIRT_CPU_ACCOUNTING
+	sig->prev_utime = sig->prev_stime = cputime_zero;
+#endif
 	sig->nvcsw = sig->nivcsw = sig->cnvcsw = sig->cnivcsw = 0;
 	sig->min_flt = sig->maj_flt = sig->cmin_flt = sig->cmaj_flt = 0;
 	sig->inblock = sig->oublock = sig->cinblock = sig->coublock = 0;
@@ -919,10 +925,6 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 
 	tty_audit_fork(sig);
 
-#ifdef CONFIG_SCHED_AUTOGROUP
-        sched_autogroup_fork(sig);
-#endif
-
 	sig->oom_adj = current->signal->oom_adj;
 
 	return 0;
@@ -932,9 +934,6 @@ void __cleanup_signal(struct signal_struct *sig)
 {
 	thread_group_cputime_free(sig);
 	tty_kref_put(sig->tty);
-#ifdef CONFIG_SCHED_AUTOGROUP
-        sched_autogroup_exit(sig);
-#endif
 	kmem_cache_free(signal_cachep, sig);
 }
 
@@ -1147,8 +1146,6 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 
 	p->bts = NULL;
 
-	p->stack_start = stack_start;
-
 	/* Perform scheduler related setup. Assign this task to a CPU. */
 	sched_fork(p, clone_flags);
 
@@ -1252,21 +1249,6 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 
 	/* Need tasklist lock for parent etc handling! */
 	write_lock_irq(&tasklist_lock);
-
-	/*
-	 * The task hasn't been attached yet, so its cpus_allowed mask will
-	 * not be changed, nor will its assigned CPU.
-	 *
-	 * The cpus_allowed mask of the parent may have changed after it was
-	 * copied first time - so re-copy it here, then check the child's CPU
-	 * to ensure it is on a valid CPU (and if not, just force it back to
-	 * parent's CPU). This avoids alot of nasty races.
-	 */
-	p->cpus_allowed = current->cpus_allowed;
-	p->rt.nr_cpus_allowed = current->rt.nr_cpus_allowed;
-	if (unlikely(!cpu_isset(task_cpu(p), p->cpus_allowed) ||
-			!cpu_online(task_cpu(p))))
-		set_task_cpu(p, smp_processor_id());
 
 	/* CLONE_PARENT re-uses the old parent */
 	if (clone_flags & (CLONE_PARENT|CLONE_THREAD)) {
@@ -1754,9 +1736,8 @@ bad_unshare_cleanup_vm:
 
 bad_unshare_cleanup_sigh:
 	if (new_sigh)
-	  if (atomic_dec_and_test(&new_sigh->count)) {
-	    kmem_cache_free(sighand_cachep, new_sigh);
-	  }
+		if (atomic_dec_and_test(&new_sigh->count))
+			kmem_cache_free(sighand_cachep, new_sigh);
 
 bad_unshare_cleanup_fs:
 	if (new_fs)
@@ -1790,4 +1771,3 @@ int unshare_files(struct files_struct **displaced)
 	task_unlock(task);
 	return 0;
 }
-

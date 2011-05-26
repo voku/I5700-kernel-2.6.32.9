@@ -1,7 +1,7 @@
 /*
  * Automatically generated C config: don't edit
  * Linux kernel version: 2.6.32.9
- * Wed May 25 18:10:08 2011
+ * Thu May 26 08:07:26 2011
  */
 #define AUTOCONF_INCLUDED
 #define CONFIG_MMC_SDHCI_S3C_DMA 1
@@ -112,6 +112,7 @@
 #define CONFIG_ANDROID_TIMED_OUTPUT 1
 #define CONFIG_FLATMEM_MANUAL 1
 #define CONFIG_HOTPLUG 1
+#define CONFIG_CGROUPS 1
 #define CONFIG_SND_PCM 1
 #define CONFIG_IPV6 1
 #define CONFIG_FLAT_NODE_MEM_MAP 1
@@ -408,7 +409,6 @@
 #define CONFIG_EARLYSUSPEND 1
 #define CONFIG_CPU_ABRT_EV6 1
 #define CONFIG_VECTORS_BASE 0xffff0000
-#define CONFIG_NET_ACTIVITY_STATS 1
 #define CONFIG_HZ 200
 #define CONFIG_NETFILTER_XT_MATCH_HELPER 1
 #define CONFIG_CPU_32v6K 1

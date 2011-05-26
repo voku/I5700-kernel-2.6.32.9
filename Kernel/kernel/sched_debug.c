@@ -83,25 +83,8 @@ static void print_cfs_group_stats(struct seq_file *m, int cpu,
 #endif
 	P(se->load.weight);
 #undef PN
-
 #undef P
 }
-#endif
-
-#if defined(CONFIG_CGROUP_SCHED) && \
-  (defined(CONFIG_FAIR_GROUP_SCHED) || defined(CONFIG_RT_GROUP_SCHED))
-static void task_group_path(struct task_group *tg, char *buf, int buflen)
-{
-  /* may be NULL if the underlying cgroup isn't fully-created yet */
-  if (!tg->css.cgroup) {
-    if (!autogroup_path(tg, buf, buflen))
-      buf[0] = '\0';
-    return;
-  }
-  cgroup_path(tg->css.cgroup, buf, buflen);
-}
-
-
 #endif
 
 static void
@@ -131,7 +114,7 @@ print_task(struct seq_file *m, struct rq *rq, struct task_struct *p)
 	{
 		char path[64];
 
-		task_group_path(task_group(p), path, sizeof(path));
+		cgroup_path(task_group(p)->css.cgroup, path, sizeof(path));
 		SEQ_printf(m, " %s", path);
 	}
 #endif
@@ -162,9 +145,8 @@ static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu)
 	read_unlock_irqrestore(&tasklist_lock, flags);
 }
 
-#if 0
-#if defined(CONFIG_CGROUP_SCHED) &&					\
-(defined(CONFIG_FAIR_GROUP_SCHED) || defined(CONFIG_RT_GROUP_SCHED))
+#if defined(CONFIG_CGROUP_SCHED) && \
+	(defined(CONFIG_FAIR_GROUP_SCHED) || defined(CONFIG_RT_GROUP_SCHED))
 static void task_group_path(struct task_group *tg, char *buf, int buflen)
 {
 	/* may be NULL if the underlying cgroup isn't fully-created yet */
@@ -174,7 +156,6 @@ static void task_group_path(struct task_group *tg, char *buf, int buflen)
 	}
 	cgroup_path(tg->css.cgroup, buf, buflen);
 }
-#endif
 #endif
 
 void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
@@ -192,11 +173,6 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 	task_group_path(tg, path, sizeof(path));
 
 	SEQ_printf(m, "\ncfs_rq[%d]:%s\n", cpu, path);
-#elif defined(CONFIG_USER_SCHED) && defined(CONFIG_FAIR_GROUP_SCHED)
-	{
-		uid_t uid = cfs_rq->tg->uid;
-		SEQ_printf(m, "\ncfs_rq[%d] for UID: %u\n", cpu, uid);
-	}
 #else
 	SEQ_printf(m, "\ncfs_rq[%d]:\n", cpu);
 #endif
@@ -442,7 +418,6 @@ void proc_sched_show_task(struct task_struct *p, struct seq_file *m)
 	P(se.nr_failed_migrations_running);
 	P(se.nr_failed_migrations_hot);
 	P(se.nr_forced_migrations);
-	P(se.nr_forced2_migrations);
 	P(se.nr_wakeups);
 	P(se.nr_wakeups_sync);
 	P(se.nr_wakeups_migrate);
@@ -518,7 +493,6 @@ void proc_sched_set_task(struct task_struct *p)
 	p->se.nr_failed_migrations_running	= 0;
 	p->se.nr_failed_migrations_hot		= 0;
 	p->se.nr_forced_migrations		= 0;
-	p->se.nr_forced2_migrations		= 0;
 	p->se.nr_wakeups			= 0;
 	p->se.nr_wakeups_sync			= 0;
 	p->se.nr_wakeups_migrate		= 0;
@@ -535,4 +509,3 @@ void proc_sched_set_task(struct task_struct *p)
 	p->nvcsw				= 0;
 	p->nivcsw				= 0;
 }
-

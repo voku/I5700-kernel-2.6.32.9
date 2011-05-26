@@ -85,6 +85,10 @@ extern int s3c6410_timer_setup (int channel, int usec, unsigned long g_tcnt, uns
 #define S3C_FB_DISPLAY_LOGO
 #endif
 
+#ifdef CONFIG_FB_S3C_SHOW_PROGRESS
+#define S3C_FB_DISPLAY_PROGRESS
+#endif
+
 #if defined(CONFIG_MACH_SPICA)
 	#define S3C_FB_USE_CLK_DIRECTED		// KSS_2009-09-03 : Change LCD Dot Clk
 #endif

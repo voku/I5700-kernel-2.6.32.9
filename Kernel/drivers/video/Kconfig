@@ -336,7 +336,15 @@ config FB_S3C_DOUBLE_BUFFERING
 	TBA
 
 config FB_S3C_SHOW_LOGO
-	bool "Show full screen logo with progress bar"
+	bool "Show bootup logo"
+	depends on FB_S3C_BPP
+
+	default n
+	---help---
+	TBA
+
+config FB_S3C_SHOW_PROGRESS
+	bool "Show bootup progress bar"
 	depends on FB_S3C_BPP
 
 	default n
