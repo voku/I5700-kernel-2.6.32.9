@@ -46,9 +46,7 @@ MODULE_ALIAS("mmc:block");
 /*
  * max 8 partitions per card
  */
-//20100929, , [MMC] : max limitation :  8 -> 16 [START]
-#define MMC_SHIFT	4
-//20100929, , [MMC] : max limitation :  8 -> 16 [END]
+#define MMC_SHIFT	3
 #define MMC_NUM_MINORS	(256 >> MMC_SHIFT)
 
 static DECLARE_BITMAP(dev_use, MMC_NUM_MINORS);
@@ -378,11 +376,6 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		 * until later as we need to wait for the card to leave
 		 * programming mode even when things go wrong.
 		 */
-//20110123, , do not redo I/O when nomedium error [START]
-		if (brq.cmd.error == -ENOMEDIUM) {
-			goto cmd_err;
-		}
-//20110123, , do not redo I/O when nomedium error [END]
 		if (brq.cmd.error || brq.data.error || brq.stop.error) {
 			if (brq.data.blocks > 1 && rq_data_dir(req) == READ) {
 				/* Redo read one sector at a time */
@@ -506,11 +499,7 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 
 	spin_lock_irq(&md->lock);
 	while (ret)
-	{
-//20110123, , supressed the error message
-		req->cmd_flags |= REQ_QUIET;
 		ret = __blk_end_request(req, -EIO, blk_rq_cur_bytes(req));
-	}
 	spin_unlock_irq(&md->lock);
 
 	return 0;
@@ -527,40 +516,11 @@ static struct mmc_blk_data *mmc_blk_alloc(struct mmc_card *card)
 {
 	struct mmc_blk_data *md;
 	int devidx, ret;
-#ifdef CONFIG_MMC_BLOCK_DEVICE_NUMBERING
-	int idx;
-	const char *mmc_blk_name;
-#endif
 
-        //20100813  mmcblk mount fix [START]
-#if defined(CONFIG_MACH_STAR)
-        if (card->type == MMC_TYPE_MMC)
 	devidx = find_first_zero_bit(dev_use, MMC_NUM_MINORS);
-        else
-            devidx = find_next_zero_bit(dev_use, MMC_NUM_MINORS, 1);
-#else
-        devidx = find_first_zero_bit(dev_use, MMC_NUM_MINORS);
-#endif
-        //20100813  mmcblk mount fix [END]
-
 	if (devidx >= MMC_NUM_MINORS)
 		return ERR_PTR(-ENOSPC);
 	__set_bit(devidx, dev_use);
-
-#ifdef CONFIG_MMC_BLOCK_DEVICE_NUMBERING
-	mmc_blk_name = kobject_name(&card->host->parent->kobj);
-	mmc_blk_name = mmc_blk_name ? strrchr(mmc_blk_name, '.') : mmc_blk_name;
-	if (mmc_blk_name) {
-		mmc_blk_name++;
-		idx = simple_strtol(mmc_blk_name, NULL, 10);
-		if ( (idx >= 0) && (idx != devidx) &&
-			(!test_bit(idx, dev_use)) && (idx < MMC_NUM_MINORS) ) {
-			__set_bit(idx, dev_use);
-			__clear_bit(devidx, dev_use);
-			devidx = idx;
-		}
-	}
-#endif
 
 	md = kzalloc(sizeof(struct mmc_blk_data), GFP_KERNEL);
 	if (!md) {

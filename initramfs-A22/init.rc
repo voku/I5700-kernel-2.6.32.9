@@ -35,12 +35,12 @@ loglevel 3
     insmod /lib/modules/multipdp.ko
 
     insmod /lib/modules/s3c_rotator.ko
-    insmod /lib/modules/s3c_mfc.ko
+    #insmod /lib/modules/s3c_mfc.ko
     insmod /lib/modules/s3c_g2d_driver.ko
     #insmod /lib/modules/s3c_pp.ko
     insmod /lib/modules/s3c_jpeg.ko
     #insmod /lib/modules/s3c_g3d.ko
-    insmod /lib/modules/s3c_cmm.ko
+    #insmod /lib/modules/s3c_cmm.ko
     #insmod /lib/modules/s3c_camera.ko
 
     insmod /lib/modules/vibrator.ko

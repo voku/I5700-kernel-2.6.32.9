@@ -23,8 +23,20 @@
 
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
+#include <linux/clk.h>
 
 #include "sdhci.h"
+
+#include <mach/hardware.h>
+#include <mach/gpio.h>
+#include <plat/regs-gpio.h>
+#include <plat/regs-sdhci.h>
+#include <linux/irq.h>
+#include <linux/wakelock.h> //kimhyuns_add
+
+#define S3C_ACMD_MODE
+
+extern struct wake_lock sdcard_scan_wake_lock; //kimhyuns_add
 
 #define DRIVER_NAME "sdhci"
 
@@ -36,13 +48,70 @@
 #define SDHCI_USE_LEDS_CLASS
 #endif
 
+//#define TRY_USE_TFLASH_EN /* does not exist on Spica */
+
+#define TFLASH_PORT_NUM 0
+#if defined(CONFIG_MACH_QUATTRO)	//cky 20100217 suspend/resume
+#define WIFI_PORT_NUM 1
+#define WIMAX_PORT_NUM 2
+#else
+#define WIFI_PORT_NUM 2
+#endif
+
 static unsigned int debug_quirks = 0;
+static int card_detect = 0;
 
 static void sdhci_prepare_data(struct sdhci_host *, struct mmc_data *);
 static void sdhci_finish_data(struct sdhci_host *);
 
 static void sdhci_send_command(struct sdhci_host *, struct mmc_command *);
 static void sdhci_finish_command(struct sdhci_host *);
+
+#if defined(CONFIG_MACH_QUATTRO)	//cky 20100217 suspend/resume
+void (*wimax_suspend)(void) = NULL;
+void (*wimax_resume)(void) = NULL;
+
+void set_wimax_pm(void(*suspend)(void), void(*resume)(void))
+{
+	wimax_suspend = suspend;
+	wimax_resume = resume;
+}
+EXPORT_SYMBOL(set_wimax_pm);
+
+void unset_wimax_pm(void)
+{
+	wimax_suspend = NULL;
+	wimax_resume = NULL;
+}
+EXPORT_SYMBOL(unset_wimax_pm);
+#endif
+
+// TODO-JJ From here
+struct mmc_card_pm dhdpm; 
+
+extern int g_rescan_retry;
+
+void register_mmc_card_pm(struct mmc_card_pm *cardpm)
+{
+	if((cardpm != NULL) && (cardpm->suspend !=NULL) && (cardpm->resume != NULL))
+	{
+	   dhdpm.suspend = cardpm->suspend;
+	   dhdpm.resume = cardpm->resume;
+	   printk("%s: [WIFI] Callbacks registered successfully. \n",__FUNCTION__);
+	}
+	else
+	   printk("%s: Error: Null pointer!! \n", __FUNCTION__);
+}
+EXPORT_SYMBOL(register_mmc_card_pm);
+
+void unregister_mmc_card_pm(void)
+{
+   printk("%s: [WIFI] Unregistering suspend/resume callbacks.  \n", __FUNCTION__);
+   dhdpm.suspend = NULL;
+   dhdpm.resume  = NULL;	
+}
+EXPORT_SYMBOL(unregister_mmc_card_pm);
+// TODO-JJ till here
 
 static void sdhci_dumpregs(struct sdhci_host *host)
 {
@@ -83,7 +152,6 @@ static void sdhci_dumpregs(struct sdhci_host *host)
 		printk(KERN_DEBUG DRIVER_NAME ": ADMA Err: 0x%08x | ADMA Ptr: 0x%08x\n",
 		       readl(host->ioaddr + SDHCI_ADMA_ERROR),
 		       readl(host->ioaddr + SDHCI_ADMA_ADDRESS));
-
 	printk(KERN_DEBUG DRIVER_NAME ": ===========================================\n");
 }
 
@@ -92,6 +160,26 @@ static void sdhci_dumpregs(struct sdhci_host *host)
  * Low level functions                                                       *
  *                                                                           *
 \*****************************************************************************/
+
+#if SUPPORT_CLK_GATING
+static void sdhci_enable_clock_card(struct sdhci_host *host)
+{
+	u16 clk;
+
+	clk = readw(host->ioaddr + SDHCI_CLOCK_CONTROL);
+	clk |= SDHCI_CLOCK_CARD_EN;
+	writew(clk, host->ioaddr + SDHCI_CLOCK_CONTROL);
+}
+
+static void sdhci_disable_clock_card(struct sdhci_host *host)
+{
+	u16 clk;
+
+	clk = readw(host->ioaddr + SDHCI_CLOCK_CONTROL);
+	clk &= ~SDHCI_CLOCK_CARD_EN;
+	writew(clk, host->ioaddr + SDHCI_CLOCK_CONTROL);
+}
+#endif
 
 static void sdhci_clear_set_irqs(struct sdhci_host *host, u32 clear, u32 set)
 {
@@ -129,12 +217,12 @@ static void sdhci_set_card_detection(struct sdhci_host *host, bool enable)
 
 static void sdhci_enable_card_detection(struct sdhci_host *host)
 {
-	sdhci_set_card_detection(host, true);
+	//sdhci_set_card_detection(host, true);   // ijihyun.jung wifi froyo
 }
 
 static void sdhci_disable_card_detection(struct sdhci_host *host)
 {
-	sdhci_set_card_detection(host, false);
+	//sdhci_set_card_detection(host, false);  // ijihyun.jung wifi froyo
 }
 
 static void sdhci_reset(struct sdhci_host *host, u8 mask)
@@ -181,11 +269,9 @@ static void sdhci_init(struct sdhci_host *host)
 
 	sdhci_clear_set_irqs(host, SDHCI_INT_ALL_MASK,
 		SDHCI_INT_BUS_POWER | SDHCI_INT_DATA_END_BIT |
-		SDHCI_INT_DATA_CRC | SDHCI_INT_DATA_TIMEOUT | SDHCI_INT_INDEX |
-		SDHCI_INT_END_BIT | SDHCI_INT_CRC | SDHCI_INT_TIMEOUT |
-		SDHCI_INT_DATA_END | SDHCI_INT_RESPONSE);
-
-	host->last_clk = 0;
+		SDHCI_INT_DATA_CRC  | SDHCI_INT_DATA_TIMEOUT | SDHCI_INT_INDEX   |
+		SDHCI_INT_END_BIT   | SDHCI_INT_CRC          | SDHCI_INT_TIMEOUT |
+		SDHCI_INT_DATA_END  | SDHCI_INT_RESPONSE);
 }
 
 static void sdhci_reinit(struct sdhci_host *host)
@@ -468,25 +554,6 @@ static int sdhci_adma_table_pre(struct sdhci_host *host,
 			len -= offset;
 		}
 
-		if ((len == 0x10000) &&
-		    (host->quirks & SDHCI_QUIRK_NO_64KB_ADMA)) {
-			len = 1 << 15;
-
-			desc[7] = (addr >> 24) & 0xff;
-			desc[6] = (addr >> 16) & 0xff;
-			desc[5] = (addr >> 8) & 0xff;
-			desc[4] = (addr >> 0) & 0xff;
-
-			desc[3] = (len >> 8) & 0xff;
-			desc[2] = (len >> 0) & 0xff;
-
-			desc[1] = 0x00;
-			desc[0] = 0x21; /* tran, valid */
-
-			desc += 8;
-			addr += len;
-		}
-
 		desc[7] = (addr >> 24) & 0xff;
 		desc[6] = (addr >> 16) & 0xff;
 		desc[5] = (addr >> 8) & 0xff;
@@ -627,7 +694,7 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_data *data)
 	 *     (1) / (2) > 2^6
 	 */
 	count = 0;
-	current_timeout = (1 << 13) * 1000 / host->timeout_clk;
+	current_timeout = (1 << 14) * 1000 / host->timeout_clk;
 	while (current_timeout < target_timeout) {
 		count++;
 		current_timeout <<= 1;
@@ -834,7 +901,29 @@ static void sdhci_set_transfer_mode(struct sdhci_host *host,
 	if (host->flags & SDHCI_REQ_USE_DMA)
 		mode |= SDHCI_TRNS_DMA;
 
+#if defined(S3C_ACMD_MODE)
+	if (data->stop)
+		mode |= SDHCI_TRNS_ACMD12;
+#endif
+
 	sdhci_writew(host, mode, SDHCI_TRANSFER_MODE);
+}
+
+static void shdci_check_dma_overrun(struct sdhci_host *host, struct mmc_data *data)
+{
+	u32 dma_pos = readl(host->ioaddr + SDHCI_DMA_ADDRESS);
+	u32 dma_start = sg_dma_address(data->sg);
+	u32 dma_end = dma_start + data->sg->length;
+
+	/* Test whether we ended up moving more data than
+	 * was originally requested. */
+
+	if (dma_pos <= dma_end)
+		return;
+
+	printk(KERN_ERR "%s: dma overrun, dma %08x, req %08x..%08x\n",
+	       mmc_hostname(host->mmc), dma_pos,
+	       dma_start, dma_end);
 }
 
 static void sdhci_finish_data(struct sdhci_host *host)
@@ -850,6 +939,8 @@ static void sdhci_finish_data(struct sdhci_host *host)
 		if (host->flags & SDHCI_USE_ADMA)
 			sdhci_adma_table_post(host, data);
 		else {
+			shdci_check_dma_overrun(host, data);
+
 			dma_unmap_sg(mmc_dev(host->mmc), data->sg,
 				data->sg_len, (data->flags & MMC_DATA_READ) ?
 					DMA_FROM_DEVICE : DMA_TO_DEVICE);
@@ -868,6 +959,7 @@ static void sdhci_finish_data(struct sdhci_host *host)
 	else
 		data->bytes_xfered = data->blksz * data->blocks;
 
+#if !defined(S3C_ACMD_MODE)
 	if (data->stop) {
 		/*
 		 * The controller needs a reset of internal state machines
@@ -880,6 +972,7 @@ static void sdhci_finish_data(struct sdhci_host *host)
 
 		sdhci_send_command(host, data->stop);
 	} else
+#endif
 		tasklet_schedule(&host->finish_tasklet);
 }
 
@@ -890,6 +983,10 @@ static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 	unsigned long timeout;
 
 	WARN_ON(host->cmd);
+
+#if SUPPORT_CLK_GATING
+	del_timer(&host->busy_check_timer);
+#endif
 
 	/* Wait max 10 ms */
 	timeout = 10;
@@ -916,24 +1013,17 @@ static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 		mdelay(1);
 	}
 
-	mod_timer(&host->timer, jiffies + 10 * HZ);
+	mod_timer(&host->timer, jiffies + 3 * HZ); //kimhyuns_test 10->3
 
 	host->cmd = cmd;
 
+#if SUPPORT_CLK_GATING
+	sdhci_enable_clock_card(host);
+#endif
+
 	sdhci_prepare_data(host, cmd->data);
 
-#ifdef CONFIG_EMBEDDED_MMC_START_OFFSET
-	if (cmd->data) {
-		unsigned long offset = host->start_offset;
-		if (likely(mmc_card_blockaddr(host->mmc->card)))
-			offset >>= 9;
-		sdhci_writel(host, cmd->arg + offset, SDHCI_ARGUMENT);
-	} else {
-		sdhci_writel(host, cmd->arg, SDHCI_ARGUMENT);
-	}
-#else
 	sdhci_writel(host, cmd->arg, SDHCI_ARGUMENT);
-#endif
 
 	sdhci_set_transfer_mode(host, cmd->data);
 
@@ -997,7 +1087,7 @@ static void sdhci_finish_command(struct sdhci_host *host)
 	host->cmd = NULL;
 }
 
-static void sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
+void sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
 {
 	int div;
 	u16 clk;
@@ -1016,8 +1106,6 @@ static void sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
 
 	if (clock == 0)
 		goto out;
-
-	host->last_clk = clock;
 
 	for (div = 1;div < 256;div *= 2) {
 		if ((host->max_clk / div) <= clock)
@@ -1135,14 +1223,25 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	host->mrq = mrq;
 
 	/* If polling, assume that the card is always present. */
-	if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION) {
-		if (host->ops->card_detect)
-			present = host->ops->card_detect(host);
-		else
-			present = true;
-	} else
+	if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION)
+	{
+		present = true;
+	}
+	else
+	{
+		present = (__raw_readl(S3C64XX_GPNDAT) & 0x40) ? 0 : 1;		// jaehyun_a 20101021
+
+		/*
 		present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
 				SDHCI_CARD_PRESENT;
+		*/
+                //printk("hwport number=%d\n",host->hwport);
+                //printk("WIFI_PORT_NUM=%d\n",WIFI_PORT_NUM);
+		if (host->hwport == WIFI_PORT_NUM) {    //ijihyun.jung - Froyo Wifi
+                      present = 1;
+        	//printk("present if wifiport=%d\n",present);
+                }
+	}
 
 	if (!present || host->flags & SDHCI_DEVICE_DEAD) {
 		host->mrq->cmd->error = -ENOMEDIUM;
@@ -1185,21 +1284,17 @@ static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	ctrl = sdhci_readb(host, SDHCI_HOST_CONTROL);
 
-	ctrl &= ~(SDHCI_CTRL_8BITBUS|SDHCI_CTRL_4BITBUS);
-	if (ios->bus_width == MMC_BUS_WIDTH_8)
-		ctrl |= SDHCI_CTRL_8BITBUS;
-	else if (ios->bus_width == MMC_BUS_WIDTH_4)
+	if (ios->bus_width == MMC_BUS_WIDTH_4)
 		ctrl |= SDHCI_CTRL_4BITBUS;
+	else
+		ctrl &= ~SDHCI_CTRL_4BITBUS;
 
-	/* Tegra controllers often fail to detect high-speed cards when
-	 * CTRL_HISPD is programmed
-	 */
-	if (!(host->quirks & SDHCI_QUIRK_BROKEN_CTRL_HISPD)) {
-		if (ios->timing == MMC_TIMING_SD_HS)
-			ctrl |= SDHCI_CTRL_HISPD;
-		else
-			ctrl &= ~SDHCI_CTRL_HISPD;
-	}
+#if 0		// jaehyun_a 20101021  High Speed Enable bit is always low (normal).
+	if (ios->timing == MMC_TIMING_SD_HS)
+		ctrl |= SDHCI_CTRL_HISPD;
+	else
+#endif	
+		ctrl &= ~SDHCI_CTRL_HISPD;
 
 	sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
 
@@ -1228,17 +1323,14 @@ static int sdhci_get_ro(struct mmc_host *mmc)
 
 	if (host->flags & SDHCI_DEVICE_DEAD)
 		present = 0;
-	else if (!(host->quirks & SDHCI_QUIRK_BROKEN_WRITE_PROTECT)) {
-		present = sdhci_readl(host, SDHCI_PRESENT_STATE);
-		present = !(present & SDHCI_WRITE_PROTECT);
-	} else if (host->ops->get_ro)
-		present = host->ops->get_ro(host);
 	else
-		present = 0;
+		present = sdhci_readl(host, SDHCI_PRESENT_STATE);
 
 	spin_unlock_irqrestore(&host->lock, flags);
 
-	return present;
+	if (host->quirks & SDHCI_QUIRK_INVERTED_WRITE_PROTECT)
+		return !!(present & SDHCI_WRITE_PROTECT);
+	return !(present & SDHCI_WRITE_PROTECT);
 }
 
 static void sdhci_enable_sdio_irq(struct mmc_host *mmc, int enable)
@@ -1257,63 +1349,17 @@ static void sdhci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 		sdhci_unmask_irqs(host, SDHCI_INT_CARD_INT);
 	else
 		sdhci_mask_irqs(host, SDHCI_INT_CARD_INT);
-
-	if (host->quirks & SDHCI_QUIRK_ENABLE_INTERRUPT_AT_BLOCK_GAP) {
-		u8 gap_ctrl = sdhci_readb(host, SDHCI_BLOCK_GAP_CONTROL);
-		if (enable)
-			gap_ctrl |= 0x8;
-		else
-			gap_ctrl &= ~0x8;
-		sdhci_writeb(host, gap_ctrl, SDHCI_BLOCK_GAP_CONTROL);
-	}
-
 out:
 	mmiowb();
 
 	spin_unlock_irqrestore(&host->lock, flags);
 }
 
-int sdhci_enable(struct mmc_host *mmc)
-{
-	struct sdhci_host *host = mmc_priv(mmc);
-
-	if (!mmc->card || mmc->card->type==MMC_TYPE_SDIO)
-		return 0;
-
-	if (host->last_clk)
-		sdhci_set_clock(host, host->last_clk);
-	return 0;
-}
-
-int sdhci_disable(struct mmc_host *mmc, int lazy)
-{
-	struct sdhci_host *host = mmc_priv(mmc);
-
-	if (!mmc->card || mmc->card->type==MMC_TYPE_SDIO)
-		return 0;
-
-	sdhci_set_clock(host, 0);
-	return 0;
-}
-
-#ifdef CONFIG_EMBEDDED_MMC_START_OFFSET
-static unsigned int sdhci_get_host_offset(struct mmc_host *mmc) {
-	struct sdhci_host *host;
-	host = mmc_priv(mmc);
-	return host->start_offset;
-}
-#endif
-
 static const struct mmc_host_ops sdhci_ops = {
 	.request	= sdhci_request,
 	.set_ios	= sdhci_set_ios,
 	.get_ro		= sdhci_get_ro,
-	.enable		= sdhci_enable,
-	.disable	= sdhci_disable,
 	.enable_sdio_irq = sdhci_enable_sdio_irq,
-#ifdef CONFIG_EMBEDDED_MMC_START_OFFSET
-	.get_host_offset = sdhci_get_host_offset,
-#endif
 };
 
 /*****************************************************************************\
@@ -1325,10 +1371,30 @@ static const struct mmc_host_ops sdhci_ops = {
 static void sdhci_tasklet_card(unsigned long param)
 {
 	struct sdhci_host *host;
+	unsigned long flags;
 
 	host = (struct sdhci_host*)param;
 
-	sdhci_card_detect_callback(host);
+	spin_lock_irqsave(&host->lock, flags);
+
+	if (!(sdhci_readl(host, SDHCI_PRESENT_STATE) & SDHCI_CARD_PRESENT) || !card_detect) {
+		if (host->mrq) {
+			printk(KERN_ERR "%s: Card removed during transfer!\n",
+				mmc_hostname(host->mmc));
+			printk(KERN_ERR "%s: Resetting controller.\n",
+				mmc_hostname(host->mmc));
+
+			sdhci_reset(host, SDHCI_RESET_CMD);
+			sdhci_reset(host, SDHCI_RESET_DATA);
+
+			host->mrq->cmd->error = -ENOMEDIUM;
+			tasklet_schedule(&host->finish_tasklet);
+		}
+	}
+
+	spin_unlock_irqrestore(&host->lock, flags);
+
+	mmc_detect_change(host->mmc, msecs_to_jiffies(200));
 }
 
 static void sdhci_tasklet_finish(unsigned long param)
@@ -1336,15 +1402,13 @@ static void sdhci_tasklet_finish(unsigned long param)
 	struct sdhci_host *host;
 	unsigned long flags;
 	struct mmc_request *mrq;
-
+#if SUPPORT_CLK_GATING
+	unsigned long timeout = 10000;
+#endif
 	host = (struct sdhci_host*)param;
 
-        /*
-         * If this tasklet gets rescheduled while running, it will
-         * be run again afterwards but without any active request.
-         */
-	if (!host->mrq)
-		return;
+	if(host == NULL)
+		return; 
 
 	spin_lock_irqsave(&host->lock, flags);
 
@@ -1356,8 +1420,11 @@ static void sdhci_tasklet_finish(unsigned long param)
 	 * The controller needs a reset of internal state machines
 	 * upon error conditions.
 	 */
+	if(mrq == NULL || mrq->cmd == NULL)
+		goto out;
+
 	if (!(host->flags & SDHCI_DEVICE_DEAD) &&
-	    ((mrq->cmd && mrq->cmd->error) ||
+		(mrq->cmd->error ||
 		 (mrq->data && (mrq->data->error ||
 		  (mrq->data->stop && mrq->data->stop->error))) ||
 		   (host->quirks & SDHCI_QUIRK_RESET_AFTER_REQUEST))) {
@@ -1377,6 +1444,18 @@ static void sdhci_tasklet_finish(unsigned long param)
 		sdhci_reset(host, SDHCI_RESET_CMD);
 		sdhci_reset(host, SDHCI_RESET_DATA);
 	}
+out:
+#if SUPPORT_CLK_GATING
+	while(readl(host->ioaddr + SDHCI_PRESENT_STATE) & SDHCI_DATA_INHIBIT) {
+		if(timeout == 0)
+			break;
+		timeout--;
+		udelay(1);
+	}
+
+	if(timeout != 0)
+		sdhci_disable_clock_card(host);
+#endif
 
 	host->mrq = NULL;
 	host->cmd = NULL;
@@ -1389,6 +1468,7 @@ static void sdhci_tasklet_finish(unsigned long param)
 	mmiowb();
 	spin_unlock_irqrestore(&host->lock, flags);
 
+	if((host->mmc != NULL)&& (mrq != NULL))
 	mmc_request_done(host->mmc, mrq);
 }
 
@@ -1423,6 +1503,25 @@ static void sdhci_timeout_timer(unsigned long data)
 	spin_unlock_irqrestore(&host->lock, flags);
 }
 
+#if SUPPORT_CLK_GATING
+static void sdhci_busy_check_timer(unsigned long data)
+{
+	struct sdhci_host *host;
+	unsigned long flags;
+
+	host = (struct sdhci_host*)data;
+
+	spin_lock_irqsave(&host->lock, flags);
+
+	if(readl(host->ioaddr + SDHCI_PRESENT_STATE) & (SDHCI_CMD_INHIBIT | SDHCI_DATA_INHIBIT))
+		mod_timer(&host->busy_check_timer, jiffies + msecs_to_jiffies(10));
+	else
+		sdhci_disable_clock_card(host);
+
+	spin_unlock_irqrestore(&host->lock, flags);
+}
+#endif
+
 /*****************************************************************************\
  *                                                                           *
  * Interrupt handling                                                        *
@@ -1431,6 +1530,8 @@ static void sdhci_timeout_timer(unsigned long data)
 
 static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask)
 {
+	//DBG( "%s:%s nr=%d intmask=%x\n", __FILE__, __func__ , host->hwport, intmask);
+
 	BUG_ON(intmask == 0);
 
 	if (!host->cmd) {
@@ -1509,6 +1610,8 @@ static void sdhci_show_adma_error(struct sdhci_host *host) { }
 
 static void sdhci_data_irq(struct sdhci_host *host, u32 intmask)
 {
+	//DBG( "%s:%s nr=%d intmask=%x\n", __FILE__, __func__ , host->hwport, intmask);
+
 	BUG_ON(intmask == 0);
 
 	if (!host->data) {
@@ -1651,6 +1754,102 @@ out:
 	return result;
 }
 
+static irqreturn_t sdhci_irq_cd(int irq, void *dev_id)
+{
+	struct sdhci_host* host = dev_id;
+	int ext_CD_int = 0;
+	int eint_num = 0;
+	unsigned int eint0msk;
+
+	//DBG( "%s:%s\n", __FILE__, __func__ );
+
+	spin_lock(&host->lock);
+	
+	mdelay(1);
+	eint_num = irq - IRQ_EINT(0);
+	__raw_writel((1 << eint_num), S3C64XX_EINT0PEND);
+
+	ext_CD_int = readl(S3C64XX_GPNDAT);
+	ext_CD_int &= 0x40;	/* GPN6 */
+
+	if(ext_CD_int) 
+	{
+		card_detect = 0;
+#ifdef TRY_USE_TFLASH_EN
+		//if( system_rev >= 0x40 )
+		{
+			gpio_set_value(GPIO_TFLASH_EN, 0);
+			printk(KERN_INFO DRIVER_NAME ": TFLASH_EN OFF in %s()\n", __func__);
+		}
+#endif
+		eint0msk = __raw_readl(S3C64XX_EINT0MASK);
+		eint0msk |= (1 << eint_num);
+		__raw_writel(eint0msk, S3C64XX_EINT0MASK);
+	}
+	else
+	{
+		printk("kimhyuns sdhci_irq_cd lock 1 \n");	
+		wake_lock_timeout(&sdcard_scan_wake_lock, 4*HZ);
+		card_detect = 1;
+		g_rescan_retry = 1;
+#ifdef TRY_USE_TFLASH_EN
+		//if( system_rev >= 0x40 )
+		{
+			gpio_set_value(GPIO_TFLASH_EN, 1);
+			printk(KERN_INFO DRIVER_NAME ": TFLASH_EN ON in %s()\n", __func__);
+		}
+#endif
+	}
+
+	printk("CARD DETECTION = %d\n", (__raw_readl(S3C64XX_GPNDAT) & 0x40) ? 0 : 1);	// jaehyun_a 20101021
+	tasklet_schedule(&host->card_tasklet);	
+	mmiowb();
+
+	spin_unlock(&host->lock);
+	
+	return IRQ_HANDLED;
+}
+
+
+void sdhci_set_scanflags(void)
+{
+	int ext_CD_int = 0;
+	int eint_num = 6;
+	unsigned int eint0msk;
+    printk(KERN_ERR "sdhci_set_scanflags###########################\n");
+
+	ext_CD_int = readl(S3C64XX_GPNDAT);
+	ext_CD_int &= 0x40;	/* GPN6 */
+
+	if(ext_CD_int) 
+	{
+		card_detect = 0;//kimhyuns 0->1
+
+#ifdef TRY_USE_TFLASH_EN
+		gpio_set_value(GPIO_TFLASH_EN, 0);//kimhyuns 0->1
+		printk(KERN_INFO DRIVER_NAME ": TFLASH_EN OFF in %s()\n", __func__);
+#endif
+                
+#if 0 //kimhyuns . 		
+		eint0msk = __raw_readl(S3C64XX_EINT0MASK);
+		eint0msk |= (1 << eint_num);
+		__raw_writel(eint0msk, S3C64XX_EINT0MASK);
+#endif 
+	}
+	else
+	{
+		printk("kimhyuns sdhci_set_scanflags lock2 \n");
+		wake_lock_timeout(&sdcard_scan_wake_lock, 4*HZ);
+		card_detect = 1;
+		g_rescan_retry = 1;
+#ifdef TRY_USE_TFLASH_EN
+		gpio_set_value(GPIO_TFLASH_EN, 1);
+		printk(KERN_INFO DRIVER_NAME ": TFLASH_EN ON in %s()\n", __func__);
+#endif
+	}
+
+}
+
 /*****************************************************************************\
  *                                                                           *
  * Suspend/resume                                                            *
@@ -1659,17 +1858,7 @@ out:
 
 #ifdef CONFIG_PM
 
-//20110214, , cancel delayed work queue when the device enter sleep [START]
-int sdhci_cancel_delayed_work(struct sdhci_host *host, pm_message_t state)
-{
-	int ret;
-
-	ret = mmc_cancel_delayed_work(host->mmc, state);
-	return ret;
-}
-EXPORT_SYMBOL_GPL(sdhci_cancel_delayed_work);
-//20110214, , cancel delayed work queue when the device enter sleep [END]
-
+#if 0
 int sdhci_suspend_host(struct sdhci_host *host, pm_message_t state)
 {
 	int ret;
@@ -1679,25 +1868,45 @@ int sdhci_suspend_host(struct sdhci_host *host, pm_message_t state)
 	ret = mmc_suspend_host(host->mmc, state);
 	if (ret)
 		return ret;
+#if SUPPORT_CLK_GATING
+	del_timer(&host->busy_check_timer);
+#endif
 
-	free_irq(host->irq, host);
+	if(host->irq)
+		free_irq(host->irq, host);
+
+	if(host->hwport == TFLASH_PORT_NUM)
+		free_irq(host->irq_cd, host);
 
 	return 0;
 }
-
 EXPORT_SYMBOL_GPL(sdhci_suspend_host);
 
+extern int extra_eint0pend;
 int sdhci_resume_host(struct sdhci_host *host)
 {
 	int ret;
+
+	printk("[%s] host->hw_name=%s host->hwport=%d, host->mmc->index=%d\n", __func__, host->hw_name, host->hwport, host->mmc->index);
+
+	if(extra_eint0pend&0x0040)
+	{
+	    sdhci_set_scanflags();
+	}
 
 	if (host->flags & (SDHCI_USE_SDMA | SDHCI_USE_ADMA)) {
 		if (host->ops->enable_dma)
 			host->ops->enable_dma(host);
 	}
 
-	ret = request_irq(host->irq, sdhci_irq, IRQF_SHARED,
-			  mmc_hostname(host->mmc), host);
+	if(host->hwport == TFLASH_PORT_NUM) {
+		set_irq_type(host->irq_cd,IRQ_TYPE_EDGE_BOTH);	
+		ret = request_irq(host->irq_cd, sdhci_irq_cd, IRQF_DISABLED, mmc_hostname(host->mmc), host);
+		if (ret)
+			return ret;
+	}
+
+	ret = request_irq(host->irq, sdhci_irq, IRQF_SHARED,mmc_hostname(host->mmc), host);
 	if (ret)
 		return ret;
 
@@ -1709,11 +1918,133 @@ int sdhci_resume_host(struct sdhci_host *host)
 		return ret;
 
 	sdhci_enable_card_detection(host);
-
 	return 0;
 }
 
 EXPORT_SYMBOL_GPL(sdhci_resume_host);
+
+#else
+
+int sdhci_suspend_host(struct sdhci_host *host, pm_message_t state)
+{
+	int ret = 0;
+
+	if(host->mmc)
+	{
+		if(host->hwport != 2)
+		{
+	ret = mmc_suspend_host(host->mmc, state);
+	if (ret)
+		return ret;
+		}
+		else
+		{ 
+			if(dhdpm.suspend != NULL)
+			{
+			    dhdpm.suspend();
+			}
+			else
+			{
+			    printk("[WIFI] %s: dhdpm.suspend=NULL \n",__FUNCTION__);
+			}
+			
+			sdhci_dumpregs(host);
+			writel(0, host->ioaddr + SDHCI_INT_ENABLE);
+
+			clk_disable(host->clk_io);
+			clk_disable(host->clk_bus);	
+			
+		}
+		
+		if(host->irq)
+		{
+			free_irq(host->irq, host);
+		}
+		if(host->hwport == TFLASH_PORT_NUM) 
+		if(host->irq_cd)
+		{
+			free_irq(host->irq_cd, host);
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sdhci_suspend_host);
+
+extern int extra_eint0pend;
+int sdhci_resume_host(struct sdhci_host *host)
+{
+	int ret = 0;
+
+	if (host->mmc) 
+	{
+		if (host->flags & (SDHCI_USE_SDMA | SDHCI_USE_ADMA)) 
+		{
+		if (host->ops->enable_dma)
+			host->ops->enable_dma(host);
+		}
+
+		#if 1
+		if(host->hwport == TFLASH_PORT_NUM) {
+			set_irq_type(host->irq_cd,IRQ_TYPE_EDGE_BOTH);
+			ret = request_irq(host->irq_cd, sdhci_irq_cd, IRQF_DISABLED, mmc_hostname(host->mmc), host);
+			if (ret) {
+				printk( "%s : request_irq(host->irq_cd failed\n", __func__ );
+				return ret;
+			}
+		}
+		#else
+		set_irq_type(host->irq_cd,IRQ_TYPE_EDGE_BOTH);	
+		ret = request_irq(host->irq_cd, sdhci_irq_cd, IRQF_DISABLED, mmc_hostname(host->mmc), host);
+		#endif
+		ret = request_irq(host->irq, sdhci_irq, IRQF_SHARED,mmc_hostname(host->mmc), host);
+			if (ret) {
+				printk( "%s : request_irq(host->irq failed\n", __func__ );
+				return ret;
+			}
+		if (ret)
+			return ret;
+
+		sdhci_init(host);
+		mmiowb();
+
+		if (host->hwport !=2)
+		{
+		    if(extra_eint0pend&0x0040)
+		    {
+                sdhci_set_scanflags();
+		    }
+			mmc_resume_host(host->mmc);
+		}
+		else
+		{
+			printk(KERN_INFO "%s: Enabling SDIO Interrupt \n", __FUNCTION__);
+			
+//temp			host->ops->change_clock(host, host->clock);
+			clk_enable(host->clk_io);
+			clk_enable(host->clk_bus);
+
+			sdhci_set_ios(host->mmc, &host->mmc->ios);
+
+			writeb(0xe, host->ioaddr + SDHCI_POWER_CONTROL); 
+			
+			sdhci_enable_sdio_irq(host->mmc, 1);
+
+			if(dhdpm.resume != NULL)
+			{
+				dhdpm.resume();
+			}
+			else
+			{
+				printk("\n[Jithu] %s: dhdpm.suspend=NULL \n",__FUNCTION__);
+			}
+		}
+	} 
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sdhci_resume_host);
+#endif
 
 #endif /* CONFIG_PM */
 
@@ -1760,11 +2091,9 @@ int sdhci_add_host(struct sdhci_host *host)
 
 	sdhci_reset(host, SDHCI_RESET_ALL);
 
-	if (!(host->quirks & SDHCI_QUIRK_BROKEN_SPEC_VERSION)) {
-		host->version = sdhci_readw(host, SDHCI_HOST_VERSION);
-		host->version = (host->version & SDHCI_SPEC_VER_MASK)
-			>> SDHCI_SPEC_VER_SHIFT;
-	}
+	host->version = sdhci_readw(host, SDHCI_HOST_VERSION);
+	host->version = (host->version & SDHCI_SPEC_VER_MASK)
+				>> SDHCI_SPEC_VER_SHIFT;
 	if (host->version > SDHCI_SPEC_200) {
 		printk(KERN_ERR "%s: Unknown controller version (%d). "
 			"You may experience problems.\n", mmc_hostname(mmc),
@@ -1874,39 +2203,16 @@ int sdhci_add_host(struct sdhci_host *host)
 	else
 		mmc->f_min = host->max_clk / 256;
 	mmc->f_max = host->max_clk;
-	mmc->caps = 0;
+	mmc->caps = MMC_CAP_SDIO_IRQ;
 
 	if (!(host->quirks & SDHCI_QUIRK_FORCE_1_BIT_DATA))
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 
-	if (!(host->quirks & SDHCI_QUIRK_NO_SDIO_IRQ))
-		mmc->caps |= MMC_CAP_SDIO_IRQ;
-
 	if (caps & SDHCI_CAN_DO_HISPD)
-		mmc->caps |= (MMC_CAP_SD_HIGHSPEED |
-			MMC_CAP_MMC_HIGHSPEED);
+		mmc->caps |= MMC_CAP_SD_HIGHSPEED;
 
-	if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION) {
-		if (!host->ops->card_detect)
-			mmc->caps |= MMC_CAP_NEEDS_POLL;
-	}
-
-	if (host->quirks & SDHCI_QUIRK_RUNTIME_DISABLE) {
-#if defined (CONFIG_LGE_BCM432X_PATCH)
-		if(mmc->index != 0)
-#endif /* CONFIG_LGE_BCM432X_PATCH */
-		mmc->caps |= MMC_CAP_DISABLE;
-                /* 20110104  sync from LU3000 [START] */
-#if defined(CONFIG_MACH_STAR)
-		mmc_set_disable_delay(mmc, msecs_to_jiffies(100));
-#else
-		mmc_set_disable_delay(mmc, msecs_to_jiffies(50));
-#endif
-                /* 20110104  sync from LU3000 [END] */
-	}
-
-	if (host->data_width >= 8)
-		mmc->caps |= MMC_CAP_8_BIT_DATA;
+	if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION)
+		mmc->caps |= MMC_CAP_NEEDS_POLL;
 
 	mmc->ocr_avail = 0;
 	if (caps & SDHCI_CAN_VDD_330)
@@ -1984,7 +2290,21 @@ int sdhci_add_host(struct sdhci_host *host)
 		sdhci_tasklet_finish, (unsigned long)host);
 
 	setup_timer(&host->timer, sdhci_timeout_timer, (unsigned long)host);
-
+#if SUPPORT_CLK_GATING
+	setup_timer(&host->busy_check_timer, sdhci_busy_check_timer, (unsigned long)host);
+#endif
+	#if 1
+	if(host->hwport == TFLASH_PORT_NUM)
+	{
+		set_irq_type(host->irq_cd,IRQ_TYPE_EDGE_BOTH);	
+		ret = request_irq(host->irq_cd, sdhci_irq_cd, IRQF_DISABLED, mmc_hostname(mmc), host);
+		if (ret)
+			goto untasklet;
+	}
+	#else
+	set_irq_type(host->irq_cd,IRQ_TYPE_EDGE_BOTH);	
+	ret = request_irq(host->irq_cd, sdhci_irq_cd, IRQF_DISABLED, mmc_hostname(mmc), host);
+	#endif
 	ret = request_irq(host->irq, sdhci_irq, IRQF_SHARED,
 		mmc_hostname(mmc), host);
 	if (ret)
@@ -2026,6 +2346,8 @@ int sdhci_add_host(struct sdhci_host *host)
 reset:
 	sdhci_reset(host, SDHCI_RESET_ALL);
 	free_irq(host->irq, host);
+	if(host->hwport == TFLASH_PORT_NUM)
+	free_irq(host->irq_cd, host);
 #endif
 untasklet:
 	tasklet_kill(&host->card_tasklet);
@@ -2068,8 +2390,13 @@ void sdhci_remove_host(struct sdhci_host *host, int dead)
 		sdhci_reset(host, SDHCI_RESET_ALL);
 
 	free_irq(host->irq, host);
+	if(host->hwport == TFLASH_PORT_NUM)
+	free_irq(host->irq_cd, host);
 
 	del_timer_sync(&host->timer);
+#if SUPPORT_CLK_GATING
+	del_timer_sync(&host->busy_check_timer);
+#endif
 
 	tasklet_kill(&host->card_tasklet);
 	tasklet_kill(&host->finish_tasklet);
@@ -2090,42 +2417,6 @@ void sdhci_free_host(struct sdhci_host *host)
 
 EXPORT_SYMBOL_GPL(sdhci_free_host);
 
-void sdhci_card_detect_callback(struct sdhci_host *host)
-{
-	unsigned long flags;
-	int present;
-
-	spin_lock_irqsave(&host->lock, flags);
-
-	if ((host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION) &&
-	    host->ops->card_detect)
-		present = host->ops->card_detect(host);
-	else
-		present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
-			SDHCI_CARD_PRESENT;
-
-	if (!present) {
-		if (host->mrq) {
-			printk(KERN_ERR "%s: Card removed during transfer!\n",
-				mmc_hostname(host->mmc));
-			printk(KERN_ERR "%s: Resetting controller.\n",
-				mmc_hostname(host->mmc));
-
-			sdhci_reset(host, SDHCI_RESET_CMD);
-			sdhci_reset(host, SDHCI_RESET_DATA);
-
-			host->mrq->cmd->error = -ENOMEDIUM;
-			tasklet_schedule(&host->finish_tasklet);
-		}
-	}
-
-	spin_unlock_irqrestore(&host->lock, flags);
-
-	mmc_detect_change(host->mmc, msecs_to_jiffies(200));
-}
-EXPORT_SYMBOL_GPL(sdhci_card_detect_callback);
-
-
 /*****************************************************************************\
  *                                                                           *
  * Driver init/exit                                                          *
@@ -2134,9 +2425,23 @@ EXPORT_SYMBOL_GPL(sdhci_card_detect_callback);
 
 static int __init sdhci_drv_init(void)
 {
+	int ext_CD_int = 0;
 	printk(KERN_INFO DRIVER_NAME
-		": Secure Digital Host Controller Interface driver\n");
-	printk(KERN_INFO DRIVER_NAME ": Copyright(c) Pierre Ossman\n");
+		": Samsung S3C6410 SD/MMC driver\n");
+#ifdef TRY_USE_TFLASH_EN
+	{
+		ext_CD_int = readl(S3C64XX_GPNDAT);
+		ext_CD_int &= 0x40;	// GPN6
+		if(gpio_get_value(GPIO_TFLASH_EN) && ext_CD_int)
+		{
+			gpio_set_value(GPIO_TFLASH_EN, 0);
+			printk(KERN_INFO DRIVER_NAME ": TFLASH_EN OFF in %s()\n", __func__);
+		}
+	}
+#endif
+#ifdef LOCAL_CONFIG_DELAYED_CARD_DETECT
+	INIT_DELAYED_WORK(&sdhci_work.work, sdhci_cd_work_func);
+#endif
 
 	return 0;
 }
