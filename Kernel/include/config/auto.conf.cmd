@@ -342,7 +342,7 @@ deps_config := \
 	drivers/net/usb/Kconfig \
 	drivers/net/wimax/i2400m/Kconfig \
 	drivers/net/wimax/Kconfig \
-	drivers/net/wireless/bcm4329/Kconfig \
+	drivers/net/wireless/bcm4325/Kconfig \
 	drivers/net/wireless/iwmc3200wifi/Kconfig \
 	drivers/net/wireless/wl12xx/Kconfig \
 	drivers/net/wireless/orinoco/Kconfig \
@@ -561,7 +561,7 @@ deps_config := \
 include/config/auto.conf: \
 	$(deps_config)
 
-ifneq "$(KERNELVERSION)" "2.6.32.9"
+ifneq "$(KERNELVERSION)" "2.6.32.40"
 include/config/auto.conf: FORCE
 endif
 ifneq "$(ARCH)" "arm"

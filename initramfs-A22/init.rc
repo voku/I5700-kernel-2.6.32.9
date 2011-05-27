@@ -24,7 +24,7 @@ loglevel 3
     symlink /sys/kernel/debug /d
 
 # Kernel version
-    setprop ro.build.display.id "VOKU-kernel 2.6.32.9 v0.4"
+    setprop ro.build.display.id "VOKU-kernel 2.6.32 v0.5"
 
 # insert modules
     insmod /lib/modules/xsr.ko
