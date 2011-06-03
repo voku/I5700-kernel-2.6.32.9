@@ -20,26 +20,6 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/i2c/pmic.h>
-#include <linux/proc_fs.h>
-#include <linux/xmister.h>
-#include <asm/uaccess.h>
-#define PROCFS_NAME 		"undervolt"
-#define PROCFS_SIZE			4
-static struct proc_dir_entry *UV_Proc_File;
-
-static char procfs_buffer[PROCFS_SIZE]="0\0\0";
-
-/**
- * The size of the buffer
- *
- */
-static unsigned long procfs_buffer_size=1;
-static unsigned int undervolt=0;
-#define DEF_800 1350
-#define DEF_400 1150
-#define DEF_266 1100
-#define DEF_133 1050
-#define DEF_66 	1050
 
 #include <asm/system.h>
 #include <plat/s3c64xx-dvfs.h>
@@ -51,50 +31,31 @@ static spinlock_t dvfs_lock;
 
 #define CLIP_LEVEL(a, b) (a > b ? b : a)
 
-int uv_procfile_read(char *buffer,
-	      char **buffer_location,
-	      off_t offset, int buffer_length, int *eof, void *data)
-{
-	int ret;
-	
-	if (offset > 0) {
-		/* we have finished to read, return 0 */
-		ret  = 0;
-	} else {
-		/* fill the buffer, return the buffer size */
-		memcpy(buffer, procfs_buffer, procfs_buffer_size);
-		ret = procfs_buffer_size;
-	}
-
-	return ret;
-}
-
-
 static struct cpufreq_frequency_table freq_table_532MHz[] = {
-	{0, 667*KHZ_T},
-	{1, 333*KHZ_T},
-	{2, 166*KHZ_T},
+	{0, 532*KHZ_T},
+	{1, 266*KHZ_T},
+	{2, 133*KHZ_T},
 #ifdef USE_DVFS_AL1_LEVEL
-	{3, 166*KHZ_T},
-	{4, 83*KHZ_T},
+	{3, 133*KHZ_T},
+	{4, 66*KHZ_T},
 	{5, CPUFREQ_TABLE_END},		
 #else
-	{3, 83*KHZ_T},
+	{3, 66*KHZ_T},
 	{4, CPUFREQ_TABLE_END},		
 #endif /* USE_DVFS_AL1_LEVEL */
 };
 
 static struct cpufreq_frequency_table freq_table_800MHz[] = {
-	{0, 1066*KHZ_T},
-	{1, 533*KHZ_T},
-	{2, 355*KHZ_T},	
-	{3, 177*KHZ_T},
+	{0, 800*KHZ_T},
+	{1, 400*KHZ_T},
+	{2, 266*KHZ_T},	
+	{3, 133*KHZ_T},
 #ifdef USE_DVFS_AL1_LEVEL
-	{4, 177*KHZ_T},
-	{5, (88)*KHZ_T},
+	{4, 133*KHZ_T},
+	{5, (66)*KHZ_T},
 	{6, CPUFREQ_TABLE_END},
 #else
-	{4, (88)*KHZ_T},
+	{4, (66)*KHZ_T},
 	{5, CPUFREQ_TABLE_END},
 #endif /* USE_DVFS_AL1_LEVEL */
 };
@@ -127,65 +88,31 @@ static unsigned char transition_state_532MHz[][2] = {
 /* frequency voltage matching table */
 static const unsigned int frequency_match_532MHz[][4] = {
 /* frequency, Mathced VDD ARM voltage , Matched VDD INT*/
-	{667000, 1100, 1250, 0},
-	{333000, 1100, 1250, 1},
-	{166000, 1000, 1250, 2},
+	{532000, 1100, 1250, 0},
+	{266000, 1100, 1250, 1},
+	{133000, 1000, 1250, 2},
 #ifdef USE_DVFS_AL1_LEVEL
-	{166000, 1050, 1050, 3},
-	{83000, 1050, 1050, 4},
+	{133000, 1050, 1050, 3},
+	{66000, 1050, 1050, 4},
 #else
-	{83000, 1050, 1050, 3},
+	{66000, 1050, 1050, 3},
 #endif /* USE_DVFS_AL1_LEVEL */
 };
-
 
 /* frequency voltage matching table */
-static unsigned int frequency_match_800MHz[][4] = {
+static const unsigned int frequency_match_800MHz[][4] = {
 /* frequency, Mathced VDD ARM voltage , Matched VDD INT*/
-	{1066000, DEF_800, 1250, 0},
-	{533000, DEF_400, 1250, 1},
-	{355000, DEF_266, 1250, 2},
-	{177000, DEF_133, 1250, 3},
+	{800000, 1350, 1250, 0},
+	{400000, 1150, 1250, 1},
+	{266000, 1100, 1250, 2},
+	{133000, 1050, 1250, 3},
 #ifdef USE_DVFS_AL1_LEVEL
-	{177000, DEF_133, 1050, 4},
-	{88000, DEF_66, 1050, 5},
+	{133000, 1050, 1050, 4},
+	{66000, 1050, 1050, 5},
 #else
-	{88000, 1050, 1050, 4},
+	{66000, 1050, 1050, 4},
 #endif /* USE_DVFS_AL1_LEVEL */
 };
-
-int uv_procfile_write(struct file *file, const char *buffer, unsigned long count,
-		   void *data)
-{
-	int temp;
-
-	temp=0;
-	if ( sscanf(buffer,"%d",&temp) < 1 ) return procfs_buffer_size;
-	if ( temp < 0 || temp > 999 ) return procfs_buffer_size;
-	
-	procfs_buffer_size = count;
-	if (procfs_buffer_size > PROCFS_SIZE ) {
-		procfs_buffer_size=PROCFS_SIZE;
-	}
-	
-	/* write data to the buffer */
-	if ( copy_from_user(procfs_buffer, buffer, procfs_buffer_size) ) {
-		printk(KERN_INFO "undervolt error\n");
-		return -EFAULT;
-	}
-	
-	sscanf(procfs_buffer,"%u",&undervolt);
-
-	if ( undervolt > 0 && undervolt < 1000 ) {
-		frequency_match_800MHz[0][1]=DEF_800-undervolt;
-		frequency_match_800MHz[1][1]=DEF_400-undervolt;
-		frequency_match_800MHz[2][1]=DEF_266-undervolt;
-		frequency_match_800MHz[3][1]=DEF_133-undervolt;
-		frequency_match_800MHz[4][1]=DEF_66-undervolt;
-	}
-	
-	return procfs_buffer_size;
-}
 
 extern int is_pmic_initialized(void);
 static const unsigned int (*frequency_match[2])[4] = {
@@ -203,27 +130,37 @@ static struct cpufreq_frequency_table *s3c6410_freq_table[] = {
 	freq_table_800MHz,
 };
 
+int set_max_freq_flag = 0;
 int dvfs_change_quick = 0;
 void set_dvfs_perf_level(void)
 {
-	spin_lock(&dvfs_lock);	
+	unsigned long flag;
+	if(spin_trylock_irqsave(&dvfs_lock, flag)){
 
-	/* if user input (keypad, touchscreen) occur, raise up 800MHz */
-	/* maximum frequency :800MHz(0), 400MHz(1) */
-	s3c64xx_cpufreq_index = 0;
+		/* if some user event (keypad, touchscreen) occur, freq will be raised to 532MHz */
+		/* maximum frequency :532MHz(0), 266MHz(1) */
+		s3c64xx_cpufreq_index = 0;
 	dvfs_change_quick = 1;
-	spin_unlock(&dvfs_lock);
+		spin_unlock_irqrestore(&dvfs_lock,flag);
+	}
 }
 EXPORT_SYMBOL(set_dvfs_perf_level);
 
 static int dvfs_level_count = 0;
 void set_dvfs_level(int flag)
 {
-	spin_lock(&dvfs_lock);	
+//to do
+	unsigned long irq_flags;
+#if 1
+	if(set_max_freq_flag){
+	  dvfs_level_count = (flag == 0)?(dvfs_level_count + 1):(dvfs_level_count - 1);
+	  return;
+	}	
+	if(spin_trylock_irqsave(&dvfs_lock,irq_flags)){	
 	if(flag == 0) {
 		if (dvfs_level_count > 0) {
 			dvfs_level_count++;	
-			spin_unlock(&dvfs_lock);
+			spin_unlock_irqrestore(&dvfs_lock,irq_flags);
 			return;
 		}
 #ifdef USE_DVFS_AL1_LEVEL
@@ -236,13 +173,15 @@ void set_dvfs_level(int flag)
 	else {
 		if (dvfs_level_count > 1) {
 			dvfs_level_count--;
-			spin_unlock(&dvfs_lock);
+				spin_unlock_irqrestore(&dvfs_lock,irq_flags);
 			return;
 		}
-		s3c64xx_cpufreq_level = S3C64XX_MAXFREQLEVEL;
+			s3c64xx_cpufreq_level = S3C64XX_MAXFREQLEVEL;
 		dvfs_level_count--;
 	}
-	spin_unlock(&dvfs_lock);
+		spin_unlock_irqrestore(&dvfs_lock,irq_flags);
+	}
+#endif
 }
 EXPORT_SYMBOL(set_dvfs_level);
 
@@ -484,6 +423,37 @@ s3c6410_target_end:
 	return ret;
 }
 
+void dvfs_set_max_freq_lock(void)
+{
+	//Interrupts must be enabled when this function is called.
+   //there may be race..but no problem
+	//don't use locks...locks might cause soft lockup here
+   struct cpufreq_frequency_table *freq_tab = s3c6410_freq_table[S3C64XX_FREQ_TAB];
+	set_max_freq_flag = 1;
+	s3c64xx_cpufreq_level = 0;
+	s3c6410_target(NULL, freq_tab[0].frequency, 1);
+	dvfs_change_quick = 1;   //better to have this flag because we are not using locks. 
+	return; 
+	
+}
+
+void dvfs_set_max_freq_unlock(void)
+{
+        set_max_freq_flag = 0;
+	if (dvfs_level_count > 0) {
+#ifdef USE_DVFS_AL1_LEVEL
+		s3c64xx_cpufreq_level = S3C64XX_MAXFREQLEVEL - 2;
+#else
+		s3c64xx_cpufreq_level = S3C64XX_MAXFREQLEVEL - 1;
+#endif /* USE_DVFS_AL1_LEVEL */
+	}
+	else {
+		s3c64xx_cpufreq_level = S3C64XX_MAXFREQLEVEL;
+	}
+	return;
+
+}
+
 unsigned int get_min_cpufreq(void)
 {
 	return (s3c6410_freq_table[S3C64XX_FREQ_TAB][S3C64XX_MAXFREQLEVEL].frequency);
@@ -526,25 +496,6 @@ static int __init s3c6410_cpu_init(struct cpufreq_policy *policy)
 	clk_put(mpu_clk);
 
 	spin_lock_init(&dvfs_lock);
- 
-	UV_Proc_File = xm_add(PROCFS_NAME);
-	
-	if (UV_Proc_File == NULL) {
-		xm_remove(PROCFS_NAME);
-		printk(KERN_ALERT "Error: Could not initialize /proc/xmister/%s\n",
-			PROCFS_NAME);
-	}
-	else {
-		UV_Proc_File->read_proc  = uv_procfile_read;
-		UV_Proc_File->write_proc = uv_procfile_write;
-		//UV_Proc_File->owner 	  = THIS_MODULE;
-		UV_Proc_File->mode 	  = S_IFREG | S_IRUGO;
-		UV_Proc_File->uid 	  = 0;
-		UV_Proc_File->gid 	  = 0;
-		UV_Proc_File->size 	  = 37;
-
-		printk(KERN_INFO "/proc/xmister/%s created\n", PROCFS_NAME);
-	}
 
 	return cpufreq_frequency_table_cpuinfo(policy, s3c6410_freq_table[S3C64XX_FREQ_TAB]);
 }
