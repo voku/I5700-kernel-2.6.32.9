@@ -431,11 +431,6 @@ on boot
 #
     write /sys/class/rfkill/rfkill0/state 0
 
-#
-# SoD workaround, thanks to FatTire and munchy
-#
-#    write /sys/power/wake_lock 1
-
     chmod 6777 /system/bin/brcm_dutMode
 # +++++++++++++++++++++++++++++++++++++++++++
 
@@ -512,7 +507,7 @@ service wpa_supplicant /system/bin/wpa_supplicant -Dwext -ieth0 -c/data/misc/wif
    disabled
    oneshot
 
-service dhcpcd /system/bin/dhcpcd -BKL eth0
+service dhcpcd_eth0 /system/bin/dhcpcd -BKL eth0
    disabled
    oneshot
 

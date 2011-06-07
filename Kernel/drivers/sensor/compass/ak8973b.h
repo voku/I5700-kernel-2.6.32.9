@@ -118,5 +118,7 @@ struct akm8976_platform_data {
 	int intr;
 };
 
+extern char *get_akm_cal_ram(void);
+
 #endif
 

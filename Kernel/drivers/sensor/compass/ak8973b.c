@@ -48,7 +48,6 @@ static atomic_t m_flag;
 static atomic_t a_flag; 
 static atomic_t t_flag; 
 static atomic_t mv_flag;
-static atomic_t	p_flag;
 
 static short akmd_delay = 0;
 
@@ -872,7 +871,7 @@ static int __devinit i2c_ak8973b_probe(struct i2c_client *client, const struct i
 	err = device_create_file(&client->dev, &dev_attr_ms1);
 
 	AKECS_GetEEPROMData();
-		
+
 	AKECS_SetMode(AKECS_MODE_POWERDOWN);
 	udelay(100);
 

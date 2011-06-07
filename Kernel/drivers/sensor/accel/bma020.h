@@ -31,6 +31,7 @@
 
 /* BMA150 IOCTL */
 #define BMA150_IOC_MAGIC 				'B'
+#define BMA150_CALIBRATE				_IOW(BMA150_IOC_MAGIC,2, unsigned char)
 #define BMA150_SET_RANGE            	_IOWR(BMA150_IOC_MAGIC,4, unsigned char)
 #define BMA150_SET_MODE             	_IOWR(BMA150_IOC_MAGIC,6, unsigned char)
 #define BMA150_SET_BANDWIDTH            _IOWR(BMA150_IOC_MAGIC,8, unsigned char)
@@ -80,6 +81,17 @@
 #define CUSTOMER2_REG		0x13
 #define RANGE_BWIDTH_REG	0x14
 #define BMA020_CONF2_REG	0x15
+
+#if 0
+#define OFFS_GAIN_X_REG		0x16
+#define OFFS_GAIN_Y_REG		0x17
+#define OFFS_GAIN_Z_REG		0x18
+#define OFFS_GAIN_T_REG		0x19
+#define OFFSET_X_REG		0x1a
+#define OFFSET_Y_REG		0x1b
+#define OFFSET_Z_REG		0x1c
+#define OFFSET_T_REG		0x1d
+#endif
 
 /* register write and read delays */
 
@@ -813,6 +825,7 @@ int bma020_read_reg(unsigned char , unsigned char *, unsigned char);
 
 int bma020_write_reg(unsigned char , unsigned char*, unsigned char );
 
+bma020acc_t bma020_calibrate();
 
 
 
