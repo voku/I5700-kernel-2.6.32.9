@@ -50,9 +50,9 @@ int tick_dev_program_event(struct clock_event_device *dev, ktime_t expires,
 				dev->min_delta_ns += dev->min_delta_ns >> 1;
 
 			printk(KERN_WARNING
-			       "CE: %s increasing min_delta_ns to %llu nsec\n",
+			       "CE: %s increasing min_delta_ns to %lu nsec\n",
 			       dev->name ? dev->name : "?",
-			       (unsigned long long) dev->min_delta_ns << 1);
+			       dev->min_delta_ns << 1);
 
 			i = 0;
 		}

@@ -55,7 +55,6 @@
 #include <asm/mach/time.h>
 
 #include <plat/pm.h>
-#include <plat/s3c64xx-dvfs.h>
 
 unsigned long s3c_pm_flags;
 

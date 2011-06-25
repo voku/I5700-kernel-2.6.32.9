@@ -35,7 +35,6 @@
 #ifdef CONFIG_RTC_SYNC
 #include <linux/cpufreq.h>
 
-#include <plat/s3c64xx-dvfs.h>
 #include <linux/kernel_stat.h>
 #endif /* CONFIG_SYNC_RTC */
 

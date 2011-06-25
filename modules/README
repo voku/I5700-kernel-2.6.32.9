@@ -1,6 +1,0 @@
-SAMSUNG MODULES MODIFIED BY ME FOR 2.6.38 KERNEL
-
-To build : 
-1. Build your 2.6.38 kernel sources.
-2. Enter module directory that you want to make module. 
-3. make KDIR=path_to_your_2_6_38_kernel_tree

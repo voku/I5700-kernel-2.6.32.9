@@ -773,6 +773,8 @@ static long wb_writeback(struct bdi_writeback *wb,
 	}
 
 	for (;;) {
+		long to_write = 0;
+
 		/*
 		 * Stop writeback when nr_pages has been consumed
 		 */
@@ -786,13 +788,18 @@ static long wb_writeback(struct bdi_writeback *wb,
 		if (args->for_background && !over_bground_thresh())
 			break;
 
+		if (args->sync_mode == WB_SYNC_ALL)
+			to_write = args->nr_pages;
+		if (!to_write)
+			to_write = MAX_WRITEBACK_PAGES;
+
 		wbc.more_io = 0;
 		wbc.encountered_congestion = 0;
-		wbc.nr_to_write = MAX_WRITEBACK_PAGES;
+		wbc.nr_to_write = to_write;
 		wbc.pages_skipped = 0;
 		writeback_inodes_wb(wb, &wbc);
-		args->nr_pages -= MAX_WRITEBACK_PAGES - wbc.nr_to_write;
-		wrote += MAX_WRITEBACK_PAGES - wbc.nr_to_write;
+		args->nr_pages -= to_write - wbc.nr_to_write;
+		wrote += to_write - wbc.nr_to_write;
 
 		/*
 		 * If we consumed everything, see if we have more
@@ -807,7 +814,7 @@ static long wb_writeback(struct bdi_writeback *wb,
 		/*
 		 * Did we write something? Try for more
 		 */
-		if (wbc.nr_to_write < MAX_WRITEBACK_PAGES)
+		if (wbc.nr_to_write < to_write)
 			continue;
 		/*
 		 * Nothing written. Wait for some inode to
@@ -858,12 +865,6 @@ static long wb_check_old_data_flush(struct bdi_writeback *wb)
 {
 	unsigned long expired;
 	long nr_pages;
-
-	/*
-	 * When set to zero, disable periodic writeback
-	 */
-	if (!dirty_writeback_interval)
-		return 0;
 
 	expired = wb->last_old_flush +
 			msecs_to_jiffies(dirty_writeback_interval * 10);
@@ -960,12 +961,8 @@ int bdi_writeback_task(struct bdi_writeback *wb)
 				break;
 		}
 
-		if (dirty_writeback_interval) {
-			wait_jiffies = msecs_to_jiffies(dirty_writeback_interval * 10);
-			schedule_timeout_interruptible(wait_jiffies);
-		} else
-			schedule();
-
+		wait_jiffies = msecs_to_jiffies(dirty_writeback_interval * 10);
+		schedule_timeout_interruptible(wait_jiffies);
 		try_to_freeze();
 	}
 
@@ -1209,16 +1206,11 @@ static void wait_sb_inodes(struct super_block *sb)
  * for IO completion of submitted IO. The number of pages submitted is
  * returned.
  */
-#define freezing_or_frozen(x) (freezing(x) || frozen(x))
-
 void writeback_inodes_sb(struct super_block *sb)
 {
 	unsigned long nr_dirty = global_page_state(NR_FILE_DIRTY);
 	unsigned long nr_unstable = global_page_state(NR_UNSTABLE_NFS);
 	long nr_to_write;
-
-	if (unlikely(freezing_or_frozen(default_backing_dev_info.wb.task)))
-		return;
 
 	nr_to_write = nr_dirty + nr_unstable +
 			(inodes_stat.nr_inodes - inodes_stat.nr_unused);
@@ -1253,9 +1245,6 @@ EXPORT_SYMBOL(writeback_inodes_sb_if_idle);
  */
 void sync_inodes_sb(struct super_block *sb)
 {
-	if (unlikely(freezing_or_frozen(default_backing_dev_info.wb.task)))
-		return;
-
 	bdi_sync_writeback(sb->s_bdi, sb);
 	wait_sb_inodes(sb);
 }

@@ -44,8 +44,7 @@
 #define PORT_RM9000	16	/* PMC-Sierra RM9xxx internal UART */
 #define PORT_OCTEON	17	/* Cavium OCTEON internal UART */
 #define PORT_AR7	18	/* Texas Instruments AR7 internal UART */
-#define PORT_TEGRA	19	/* NVIDIA Tegra internal UART */
-#define PORT_MAX_8250	19	/* max port ID */
+#define PORT_MAX_8250	18	/* max port ID */
 
 /*
  * ARM specific type numbers.  These are not currently guaranteed
@@ -83,14 +82,8 @@
 #define PORT_SCIF	53
 #define PORT_IRDA	54
 
-/* Samsung S3C2410 SoC and derivatives thereof */
-#define PORT_S3C2410    55
-
 /* Samsung S3C SoC and derivatives thereof */
 #define PORT_S3C    55
-
-/* Samsung S3C2410 SoC and derivatives thereof */
-#define PORT_S3C2410    55
 
 /* SGI IP22 aka Indy / Challenge S / Indigo 2 */
 #define PORT_IP22ZILOG	56
@@ -169,9 +162,7 @@
 /* SH-SCI */
 #define PORT_SCIFA	83
 
-#define PORT_S3C64XX    84
-
-#define PORT_S3C6400	84
+#define PORT_S3C64XX	84
 
 /* NWPSERIAL */
 #define PORT_NWPSERIAL	85

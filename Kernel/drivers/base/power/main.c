@@ -461,7 +461,7 @@ static void dpm_drv_timeout(unsigned long data)
 static void dpm_drv_wdset(struct device *dev)
 {
 	dpm_drv_wd.data = (unsigned long) dev;
-	mod_timer(&dpm_drv_wd, jiffies + (HZ * 6)); //kimhyuns_test 3->6
+	mod_timer(&dpm_drv_wd, jiffies + (HZ * 6));
 }
 
 /**

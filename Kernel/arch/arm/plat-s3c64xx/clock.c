@@ -53,25 +53,25 @@ extern int  s3c6410_changedivider(unsigned int value, unsigned int vaddr);
 
 /* ARMCLK, HCLKX2, APLL, PDIV, ARM_DIV, HCLKX2_DIV */
 static const u32 s3c_cpu_clk_tab_533MHz[][6] = {
-    {532*MHZ, 266 *MHZ, 266, 3, 0, 1},
-    {266*MHZ, 266 *MHZ, 266, 3, 1, 1},
-    {133*MHZ, 266 *MHZ, 266, 3, 3, 1},
+	{532*MHZ, 266 *MHZ, 266, 3, 0, 1},
+	{266*MHZ, 266 *MHZ, 266, 3, 1, 1},
+	{133*MHZ, 266 *MHZ, 266, 3, 3, 1},
 #ifdef USE_DVFS_AL1_LEVEL
-    {133*MHZ, 133 *MHZ, 266, 1, 3, 3},
+	{133*MHZ, 133 *MHZ, 266, 1, 3, 3},
 #endif /* USE_DVFS_AL1_LEVEL */
-    { 66*MHZ, 133 *MHZ, 266, 1, 7, 3},
+	{ 66*MHZ, 133 *MHZ, 266, 1, 7, 3},
 };
 
 /* ARMCLK, HCLKX2, APLL, PDIV, ARM_DIV, HCLKX2_DIV */
 static const u32 s3c_cpu_clk_tab_800MHz[][6] = {
-    {800*MHZ,  266 *MHZ, 400, 3, 0, 2},
-    {400*MHZ,  266 *MHZ, 400, 3, 1, 2},
-    {266*MHZ,  266 *MHZ, 400, 3, 2, 2},
-    {133*MHZ,  266 *MHZ, 400, 3, 5, 2},
+	{800*MHZ,  266 *MHZ, 400, 3, 0, 2},
+	{400*MHZ,  266 *MHZ, 400, 3, 1, 2},
+	{266*MHZ,  266 *MHZ, 400, 3, 2, 2},
+	{133*MHZ,  266 *MHZ, 400, 3, 5, 2},
 #ifdef USE_DVFS_AL1_LEVEL
-    {133*MHZ,  133 *MHZ, 400, 1, 5, 5},
+	{133*MHZ,  133 *MHZ, 400, 1, 5, 5},
 #endif /* USE_DVFS_AL1_LEVEL */
-    { 66*MHZ,  133 *MHZ, 400, 1, 11, 5},
+	{ 66*MHZ,  133 *MHZ, 400, 1, 11, 5},
 };
 
 unsigned int S3C64XX_FREQ_TAB = 0;

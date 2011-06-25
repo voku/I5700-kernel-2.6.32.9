@@ -15,18 +15,14 @@ exit 1
 }
 
 OPTION=-k
-PRODUCT=r880
 
 case "$PRODUCT" in
-
-    r880)		
-                MODULES="g2d g3d mfc vibetonz bcm4325 btgpio camera cmm dpram jpeg mfc2 multipdp okmfc param pp rfs rotator staryuwlan wl wlan xsr vibetonz ramzswap"
-                KERNEL_DEF_CONFIG=r880_voku_defconfig
-                ;;
     
 	*)
-		Usage
-		;;
+		MODULES="g2d g3d mfc vibetonz bcm4325 btgpio camera cmm dpram dpram_recovery jpeg mfc2 multipdp okmfc param pp rfs rotator staryuwlan wl wlan xsr ramzswap"
+                KERNEL_DEF_CONFIG=r880_voku_defconfig
+                ;;
+
 esac 
 
 if [ ! $PWD_DIR ] ; then
@@ -61,11 +57,11 @@ build_modules()
 	echo "*************************************"
 	echo
 
-	make -C $KERNEL_DIR ARCH=arm $KERNEL_DEF_CONFIG	
+	make -C $KERNEL_DIR ARCH=arm $KERNEL_DEF_CONFIG	CFLAGS="-Ofast -marm -mfpu=vfp -mtune=rm1176jzf-s"
 	if [ $? != 0 ] ; then
 	    exit 1
 	fi
-	make -C $KERNEL_DIR ARCH=arm KBUILD_MODPOST_WARN=1 modules
+	make -C $KERNEL_DIR ARCH=arm KBUILD_MODPOST_WARN=1 modules CFLAGS="-Ofast -marm -mfpu=vfp -mtune=rm1176jzf-s"
 	if [ $? != 0 ] ; then
 	    exit 1
 	fi
@@ -74,7 +70,7 @@ build_modules()
 	do
 		echo cd $MODULES_DIR/$module
 		cd $MODULES_DIR/$module
-		make KDIR=$KERNEL_DIR
+		make KDIR=$KERNEL_DIR CFLAGS="-Ofast -marm -mfpu=vfp -mtune=rm1176jzf-s"
 		if [ -e ./*.ko ]
 		then
 		    cp ./*.ko  $KERNEL_DIR/../initramfs/lib/modules

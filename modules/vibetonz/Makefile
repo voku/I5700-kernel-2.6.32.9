@@ -13,7 +13,6 @@ all:
 
 clean:
 	rm -f *.o *.ko *.mod.c *.mod.o *~ .*.cmd .*.o.cmd Module.symvers modules.order 
-	[ -d .tmp_versions ] && ( rm -rf .tmp_versions/*; rmdir .tmp_versions; )
 
 install:
 	@$(MAKE) --no-print-directory -C $(KDIR) \

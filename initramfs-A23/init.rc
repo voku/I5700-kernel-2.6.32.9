@@ -20,7 +20,7 @@ loglevel 3
     export BOOTCLASSPATH /system/framework/core.jar:/system/framework/bouncycastle.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/android.policy.jar:/system/framework/services.jar:/system/framework/core-junit.jar
 
 # Kernel version
-    setprop ro.build.display.id "VOKU-kernel v0.3"
+	setprop ro.build.display.id "VOKU-kernel 2.6.32 v0.6"
 
 # Backward compatibility
     symlink /system/etc /etc
@@ -36,12 +36,12 @@ loglevel 3
     insmod /lib/modules/multipdp.ko
 
     insmod /lib/modules/s3c_rotator.ko
-    insmod /lib/modules/s3c_mfc.ko
+    #insmod /lib/modules/s3c_mfc.ko
     insmod /lib/modules/s3c_g2d_driver.ko
     #insmod /lib/modules/s3c_pp.ko
     insmod /lib/modules/s3c_jpeg.ko
     #insmod /lib/modules/s3c_g3d.ko
-    insmod /lib/modules/s3c_cmm.ko
+    #insmod /lib/modules/s3c_cmm.ko
     #insmod /lib/modules/s3c_camera.ko
     insmod /lib/modules/vibrator.ko
     insmod /lib/modules/param.ko
@@ -94,11 +94,12 @@ loglevel 3
     write /proc/sys/kernel/panic_on_oops 1
     write /proc/sys/kernel/hung_task_timeout_secs 0
     write /proc/cpu/alignment 4
-    write /proc/sys/kernel/sched_latency_ns 4000000
-    write /proc/sys/kernel/sched_wakeup_granularity_ns 1000000
-    write /proc/sys/kernel/sched_min_granularity_ns 800000
+    write /proc/sys/kernel/sched_latency_ns 10000000
+    write /proc/sys/kernel/sched_min_granularity_ns 4000000
+    write /proc/sys/kernel/sched_wakeup_granularity_ns 4000000
+    write /proc/sys/kernel/sched_features 24188
     write /proc/sys/kernel/sched_compat_yield 1
-    write /proc/sys/kernel/sched_child_runs_first 0
+    write /proc/sys/kernel/sched_child_runs_first 1
 
 # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
@@ -340,18 +341,42 @@ on boot
 
     write /proc/sys/vm/overcommit_memory 1
     write /proc/sys/vm/min_free_order_shift 4
-    write /proc/sys/vm/swappiness 0
-    write /proc/sys/vm/dirty_ratio 10
-    write /proc/sys/vm/vfs_cache_pressure 100
-    write /proc/sys/vm/min_free_kbytes 4096
-	write /sys/module/lowmemorykiller/parameters/minfree 3584,4096,6144,20992,23040,25088
+    write /sys/module/lowmemorykiller/parameters/minfree 3584,4096,6144,20992,23040,25088
 
     # Set init its forked children's oom_adj.
     write /proc/1/oom_adj -16
 
-    # Tweak background writeout
-    write /proc/sys/vm/dirty_expire_centisecs 200
-    write /proc/sys/vm/dirty_background_ratio  5
+    # Misc kernel tuning
+    write /proc/sys/kernel/printk 4 6 1 4
+
+    # Tweak kernel VM management
+    #write /proc/sys/vm/dirty_expire_centisecs 200
+    #write /proc/sys/vm/dirty_background_ratio  5
+    write /proc/sys/vm/oom_kill_allocating_task 1
+    #write /proc/sys/vm/vfs_cache_pressure 10
+    write /proc/sys/vm/min_free_kbytes 3072
+
+    # Tweak network parameters
+    write /proc/sys/net/ipv4/tcp_mem 256960 256960 256960
+    write /proc/sys/net/core/wmem_max 404480
+    write /proc/sys/net/core/rmem_max 404480
+    write /proc/sys/net/ipv4/tcp_wmem 4096 16384 404480
+    write /proc/sys/net/ipv4/tcp_rmem 4096 87380 404480
+    write /proc/sys/net/core/rmem_default 256960
+    write /proc/sys/net/core/wmem_default 256960
+    write /proc/sys/net/ipv4/tcp_timestamps 0
+    write /proc/sys/net/ipv4/tcp_tw_reuse 1
+    write /proc/sys/net/ipv4/tcp_sack 1
+    write /proc/sys/net/ipv4/tcp_tw_recycle 1
+    write /proc/sys/net/ipv4/tcp_no_metrics_save 1
+    write /proc/sys/net/ipv4/tcp_window_scaling 1
+    write /proc/sys/net/ipv4/tcp_keepalive_probes 5
+    write /proc/sys/net/ipv4/tcp_keepalive_time 1200
+    write /proc/sys/net/ipv4/tcp_keepalive_intvl 30
+    write /proc/sys/net/ipv4/tcp_fin_timeout 30
+    write /proc/sys/net/ipv4/tcp_congestion_control cubic
+    write /proc/sys/net/ipv4/route/flush 1
+    write /proc/sys/net/core/netdev_max_backlog 2500
 
     # Permissions for System Server and daemons.
     chown radio system /sys/android_power/state

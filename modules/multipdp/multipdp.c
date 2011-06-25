@@ -267,7 +267,7 @@ static inline struct file *dpram_open(void)
 		return NULL;
 	}
 
-	termios.c_cflag = CS8 | CREAD | HUPCL | CLOCAL | B115200;
+	termios.c_cflag = (B115200 | CS8 | CREAD | CLOCAL | HUPCL);
 	termios.c_iflag = IGNBRK | IGNPAR;
 	termios.c_lflag = 0;
 	termios.c_oflag = 0;
@@ -544,7 +544,6 @@ static void vnet_defer_xmit(struct work_struct *data)
 
    DPRINTK(2, "BEGIN\n");
 
-   mutex_lock(&pdp_lock);
    ret = 0; 
    skb = (struct sk_buff *)workqueue_data; 
    net =  (struct net_device *)skb->dev;
@@ -566,7 +565,6 @@ static void vnet_defer_xmit(struct work_struct *data)
 	netif_wake_queue(net);
 
 	vnet_start_xmit_flag = 0; 
-	mutex_unlock(&pdp_lock);
     
    DPRINTK(2, "END\n");
 }
@@ -619,8 +617,7 @@ static int vnet_start_xmit(struct sk_buff *skb, struct net_device *net)
 	dev->vn_dev.stats.rx_bytes += skb->len;
 #else
    if (vnet_start_xmit_flag != 0) {
-       EPRINTK("vnet_start_xmit() return -EAGAIN \n");
-       return -EAGAIN;
+       return NETDEV_TX_BUSY;
    }
    vnet_start_xmit_flag = 1; 
 	workqueue_data = (unsigned long)skb;
@@ -630,7 +627,7 @@ static int vnet_start_xmit(struct sk_buff *skb, struct net_device *net)
 #endif
 
    DPRINTK(2, "END\n");
-	return 0;
+	return NETDEV_TX_OK;
 }
 
 static int vnet_recv(struct pdp_info *dev, size_t len,int net_id)
@@ -704,23 +701,14 @@ static const struct net_device_ops ops = {
 
 static void vnet_setup(struct net_device *dev)
 {
-	/*
-	net_device_ops *ops = dev->netdev_ops;
-	
-	ops->ndo_open		= vnet_open;
-	ops->ndo_stop		= vnet_stop;
-	ops->ndo_start_xmit	= vnet_start_xmit;
-	ops->ndo_get_stats	= vnet_get_stats;
-	ops->ndo_tx_timeout	= vnet_tx_timeout;
-	*/
 	dev->netdev_ops         = &ops;
-	dev->type		= ARPHRD_PPP;
+        dev->type		= ARPHRD_PPP; 
 	dev->hard_header_len 	= 0;
 	dev->mtu		= MAX_PDP_DATA_LEN;
 	dev->addr_len		= 0;
 	dev->tx_queue_len	= 1000;
 	dev->flags		= IFF_POINTOPOINT | IFF_NOARP | IFF_MULTICAST;
-	dev->watchdog_timeo	= 40 * HZ;
+	dev->watchdog_timeo	= 40 * HZ; //40
 }
 
 
@@ -749,7 +737,6 @@ static struct net_device *vnet_add_dev(void *priv)
    DPRINTK(2, "END\n");
 	return dev;
 }
-
 static void vnet_del_dev(struct net_device *net)
 {
 	unregister_netdev(net);
@@ -802,6 +789,7 @@ static int vs_open(struct tty_struct *tty, struct file *filp)
 	dev->vs_dev.tty = tty;
 
    DPRINTK(2, "END\n");
+
 	return 0;
 }
 
@@ -836,6 +824,12 @@ static void vs_close(struct tty_struct *tty, struct file *filp)
 			break;
 	}
 
+if (dev == NULL) {
+		return -ENODEV;
+	}
+	dev->vs_dev.tty = NULL;
+
+	return 0;
 	DPRINTK(2, "END");
 }
 
@@ -848,17 +842,14 @@ static int vs_write(struct tty_struct *tty,
 
    DPRINTK(2, "BEGIN\n");
    
-	mutex_lock(&pdp_lock);
-
-   dev = (struct pdp_info *)tty->driver_data; 
+	dev = (struct pdp_info *)tty->driver_data; 
     
    ret = pdp_mux(dev, buf, count);
 
 	if (ret == 0) {
 		ret = count;
 	}
-   mutex_unlock(&pdp_lock);
-
+  
    DPRINTK(2, "END\n");
    
 	return ret;
@@ -1155,13 +1146,12 @@ static int pdp_demux(void)
 
    DPRINTK(2, "BEGIN\n");
 
-   mutex_lock(&pdp_lock);
-	/* read header */
+  	/* read header */
 	ret = dpram_read(dpram_filp, &hdr, sizeof(hdr));
 
 	if (ret < 0) {
       EPRINTK("pdp_demux() dpram_read ret : %d\n",ret);
-      mutex_unlock(&pdp_lock);
+      
 		return ret;
 	}
 
@@ -1196,18 +1186,17 @@ static int pdp_demux(void)
 	ret = dpram_read(dpram_filp, &ch, sizeof(ch));
 
 	if (ret < 0 || ch != 0x7e) {
-      mutex_unlock(&pdp_lock);
+      
 		return ret;
 	}
 
-   mutex_unlock(&pdp_lock);
    DPRINTK(2, "END\n");
    return 0;
    
 err:
 	/* flush the remaining data including stop byte. */
 	dpram_flush_rx(dpram_filp, len + 1);
-   mutex_unlock(&pdp_lock);
+
 	return ret;
 }
 
@@ -1251,17 +1240,15 @@ static int pdp_activate(pdp_arg_t *pdp_arg, unsigned type, unsigned flags)
 		dev->vn_dev.net = net;
 		strcpy(pdp_arg->ifname, net->name);
 
-		mutex_lock(&pdp_lock);
 		ret = pdp_add_dev(dev);
 		if (ret < 0) {
 			EPRINTK("pdp_add_dev() failed\n");
-			mutex_unlock(&pdp_lock);
+			
 			vnet_del_dev(dev->vn_dev.net);
 			kfree(dev);
 			return ret;
 		}
-		mutex_unlock(&pdp_lock);
-
+		
 		DPRINTK(1, "%s(id: %u) network device created\n", 
 			net->name, dev->id);
 	} else if (type == DEV_TYPE_SERIAL) {
@@ -1274,17 +1261,15 @@ static int pdp_activate(pdp_arg_t *pdp_arg, unsigned type, unsigned flags)
 			return ret;
 		}
 
-		mutex_lock(&pdp_lock);
 		ret = pdp_add_dev(dev);
 		if (ret < 0) {
 			EPRINTK("pdp_add_dev() failed\n");
-			mutex_unlock(&pdp_lock);
+			
 			vs_del_dev(dev);
 			kfree(dev);
 			return ret;
 		}
-		mutex_unlock(&pdp_lock);
-
+		
 		{
 			struct tty_driver * tty_driver = get_tty_driver_by_id(dev);
 
@@ -1304,8 +1289,7 @@ static int pdp_deactivate(pdp_arg_t *pdp_arg, int force)
    DPRINTK(2, "BEGIN\n");
 	DPRINTK(1, "id: %d\n", pdp_arg->id);
 
-	mutex_lock(&pdp_lock);
-
+	
 	if (pdp_arg->id == 1) {
 		DPRINTK(1, "Channel ID is 1, we will remove the network device (pdp) of channel ID: %d.\n",
 				pdp_arg->id + g_adjust);
@@ -1316,25 +1300,21 @@ static int pdp_deactivate(pdp_arg_t *pdp_arg, int force)
 	}
 
 	pdp_arg->id = pdp_arg->id + g_adjust;
-	//pdp_arg->id += PDP_ID_ADJUST;
 	DPRINTK(1, "ID is adjusted, new ID: %d\n", pdp_arg->id);
 
 	dev = pdp_get_dev(pdp_arg->id);
 
 	if (dev == NULL) {
 		EPRINTK(1, "not found id: %u\n", pdp_arg->id);
-		mutex_unlock(&pdp_lock);
 		return -EINVAL;
 	}
 	if (!force && dev->flags & DEV_FLAG_STICKY) {
 		EPRINTK(1, "sticky id: %u\n", pdp_arg->id);
-		mutex_unlock(&pdp_lock);
 		return -EACCES;
 	}
 
 	pdp_remove_dev(pdp_arg->id);
-	mutex_unlock(&pdp_lock);
-
+	
 	if (dev->type == DEV_TYPE_NET) {
 		DPRINTK(1, "%s(id: %u) network device removed\n", 
 			dev->vn_dev.net->name, dev->id);
@@ -1356,7 +1336,6 @@ static void __exit pdp_cleanup(void)
 	int slot;
 	struct pdp_info *dev;
 
-	mutex_lock(&pdp_lock);
 	for (slot = 0; slot < MAX_PDP_CONTEXT; slot++) {
 		dev = pdp_remove_slot(slot);
 		if (dev) {
@@ -1376,7 +1355,7 @@ static void __exit pdp_cleanup(void)
 			kfree(dev);
 		}
 	}
-	mutex_unlock(&pdp_lock);
+	
 }
 
 static int pdp_adjust(const int adjust)
@@ -1462,8 +1441,6 @@ static int multipdp_proc_read(char *page, char **start, off_t off,
 	char *p = page;
 	int len;
 
-	mutex_lock(&pdp_lock);
-
 	p += sprintf(p, "modified multipdp driver on 20070205");
 	for (len = 0; len < MAX_PDP_CONTEXT; len++) {
 		struct pdp_info *dev = pdp_table[len];
@@ -1477,8 +1454,7 @@ static int multipdp_proc_read(char *page, char **start, off_t off,
 			     dev->type == DEV_TYPE_NET ? "network" : "serial",
 			     dev->flags);
 	}
-	mutex_unlock(&pdp_lock);
-
+	
 	len = (p - page) - off;
 	if (len < 0)
 		len = 0;
@@ -1590,4 +1566,3 @@ module_exit(multipdp_exit);
 MODULE_AUTHOR("SAMSUNG ELECTRONICS CO., LTD");
 MODULE_DESCRIPTION("Multiple PDP Muxer / Demuxer");
 MODULE_LICENSE("GPL");
-

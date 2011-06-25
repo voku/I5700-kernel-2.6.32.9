@@ -84,7 +84,6 @@
 #include "MfcDrvParams.h"
 
 #ifdef CONFIG_PLAT_S3C64XX
-#include <plat/s3c64xx-dvfs.h>
 #include <plat/power-clock-domain.h>
 
 #ifdef CONFIG_S3C64XX_DOMAIN_GATING
@@ -334,10 +333,6 @@ static int s3c_mfc_open(struct inode *inode, struct file *file)
 	 */
 	file->private_data = (MFC_HANDLE *)handle;
 
-#ifdef CONFIG_CPU_FREQ
-	set_dvfs_level(0);
-#endif /* CONFIG_CPU_FREQ */
-
 	LOG_MSG(LOG_TRACE, "mfc_open", "MFC open success! \r\n");
 	ret = 0;
 	goto no_err;
@@ -422,9 +417,6 @@ static int s3c_mfc_release(struct inode *inode, struct file *file)
 		kdpmd_wakeup();
 		kdpmd_wait(mfc_pmdev.devid);
 #endif
-#ifdef CONFIG_CPU_FREQ
-		set_dvfs_level(1);
-#endif /* CONFIG_CPU_FREQ */
 
 #ifdef USE_MFC_DOMAIN_GATING
 		DOMAIN_POWER_OFF;

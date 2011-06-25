@@ -64,8 +64,6 @@
 #define HARDIRQ_OFFSET	(1UL << HARDIRQ_SHIFT)
 #define NMI_OFFSET	(1UL << NMI_SHIFT)
 
-#define SOFTIRQ_DISABLE_OFFSET	(2 * SOFTIRQ_OFFSET)
-
 #ifndef PREEMPT_ACTIVE
 #define PREEMPT_ACTIVE_BITS	1
 #define PREEMPT_ACTIVE_SHIFT	(NMI_SHIFT + NMI_BITS)
@@ -84,13 +82,10 @@
 /*
  * Are we doing bottom half or hardware interrupt processing?
  * Are we in a softirq context? Interrupt context?
- * in_softirq - Are we currently processing softirq or have bh disabled?
- * in_serving_softirq - Are we currently processing softirq?
  */
 #define in_irq()		(hardirq_count())
 #define in_softirq()		(softirq_count())
 #define in_interrupt()		(irq_count())
-#define in_serving_softirq()	(softirq_count() & SOFTIRQ_OFFSET)
 
 /*
  * Are we in NMI context?
@@ -137,12 +132,10 @@ extern void synchronize_irq(unsigned int irq);
 
 struct task_struct;
 
-#if !defined(CONFIG_VIRT_CPU_ACCOUNTING) && !defined(CONFIG_IRQ_TIME_ACCOUNTING)
+#ifndef CONFIG_VIRT_CPU_ACCOUNTING
 static inline void account_system_vtime(struct task_struct *tsk)
 {
 }
-#else
-extern void account_system_vtime(struct task_struct *tsk);
 #endif
 
 #if defined(CONFIG_NO_HZ)
@@ -152,12 +145,12 @@ extern void rcu_exit_nohz(void);
 
 static inline void rcu_irq_enter(void)
 {
-    rcu_exit_nohz();
+	rcu_exit_nohz();
 }
 
 static inline void rcu_irq_exit(void)
 {
-    rcu_enter_nohz();
+	rcu_enter_nohz();
 }
 
 static inline void rcu_nmi_enter(void)
@@ -235,3 +228,4 @@ extern void irq_exit(void);
 	} while (0)
 
 #endif /* LINUX_HARDIRQ_H */
+

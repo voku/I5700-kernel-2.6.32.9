@@ -550,7 +550,6 @@ static int s3c_g3d_remove(struct platform_device *pdev)
 	g3d_flush(data, G3D_FGGB_PIPESTAT_MSK);
 	g3d_flush_caches(data);
 	g3d_do_power_down(data);
-	data->owner = 0;
 #endif
 
 	misc_deregister(&s3c_g3d_dev);
@@ -575,6 +574,7 @@ static int s3c_g3d_suspend(struct platform_device *pdev, pm_message_t state)
 	g3d_flush(data, G3D_FGGB_PIPESTAT_MSK);
 	g3d_flush_caches(data);
 	g3d_do_power_down(data);
+        data->owner = 0;
 #endif
 	return 0;
 }

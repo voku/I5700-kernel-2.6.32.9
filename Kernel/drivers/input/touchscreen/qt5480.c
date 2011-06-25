@@ -22,9 +22,6 @@
 #include <mach/hardware.h>
 //#include <mach/spica.h>
 
-#ifdef CONFIG_CPU_FREQ
-#include <plat/s3c64xx-dvfs.h>
-#endif
 
 //#define QT5480_SPARE_EEPROM /* Never write eeprom, to prevent wear */
 //#define QT5480_DEBUG /* Print debug messages */

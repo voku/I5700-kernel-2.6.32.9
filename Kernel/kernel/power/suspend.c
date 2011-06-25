@@ -15,7 +15,7 @@
 #include <linux/console.h>
 #include <linux/cpu.h>
 #include <linux/syscalls.h>
-#include <linux/cpufreq.h>
+
 #include "power.h"
 
 const char *const pm_states[PM_SUSPEND_MAX] = {

@@ -22,7 +22,6 @@
 #include <linux/irq.h>
 
 #include <plat/pm.h>
-#include <plat/s3c64xx-dvfs.h>
 #include <linux/i2c/pmic.h>
   
 #include <mach/param.h>

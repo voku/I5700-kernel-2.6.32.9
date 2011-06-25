@@ -778,6 +778,9 @@ static void __init infobowlq_machine_init(void) {
 
         ftm_enable_usb_sw = infobowlq_ftm_enable_usb_sw;
 
+#ifdef CONFIG_SEC_LOG_BUF
+	sec_log_buf_init();
+#endif
 #ifdef DUMP_GPIO_DEBUG_INFO
 	s3c_dump_gpio();
 #endif

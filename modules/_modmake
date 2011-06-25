@@ -1,0 +1,21 @@
+#!/bin/sh
+
+cd wlan
+../_mm1
+cd ..
+
+cd vibetonz
+../_mm1
+cd ..
+
+cd dpram
+../_mm1
+cd ..
+
+cd dpram_recovery
+../_mm1
+cd ..
+
+cd multipdp
+../_mm1
+cd ..

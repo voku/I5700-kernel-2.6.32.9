@@ -1,0 +1,6 @@
+#!/bin/sh
+
+make KDIR=/home/banjo/I5700-kernel-2-6-32-9/16Bpp-I5700-kernel-2.6.32.9-FROYO/Kernel CFLAGS="-O3 -marm -mfpu=vfp -mtune=rm1176jzf-s"
+/home/banjo/ctng/opt/arm-spica-linux-uclibcgnueabi/bin/arm-spica-linux-uclibcgnueabi-strip --strip-unneeded *.ko
+cp *.ko /home/banjo/I5700-kernel-2-6-32-9/16Bpp-I5700-kernel-2.6.32.9-FROYO/initramfs/lib/modules
+

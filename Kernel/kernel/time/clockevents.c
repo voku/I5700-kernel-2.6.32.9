@@ -39,9 +39,10 @@ static DEFINE_SPINLOCK(clockevents_lock);
  *
  * Math helper, returns latch value converted to nanoseconds (bound checked)
  */
-u64 clockevent_delta2ns(unsigned long latch, struct clock_event_device *evt)
+unsigned long clockevent_delta2ns(unsigned long latch,
+				  struct clock_event_device *evt)
 {
-	u64 clc = (u64) latch << evt->shift;
+	u64 clc = ((u64) latch << evt->shift);
 
 	if (unlikely(!evt->mult)) {
 		evt->mult = 1;
@@ -51,10 +52,10 @@ u64 clockevent_delta2ns(unsigned long latch, struct clock_event_device *evt)
 	do_div(clc, evt->mult);
 	if (clc < 1000)
 		clc = 1000;
-	if (clc > KTIME_MAX)
-		clc = KTIME_MAX;
+	if (clc > LONG_MAX)
+		clc = LONG_MAX;
 
-	return clc;
+	return (unsigned long) clc;
 }
 EXPORT_SYMBOL_GPL(clockevent_delta2ns);
 

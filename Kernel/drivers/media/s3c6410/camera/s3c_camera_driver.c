@@ -54,7 +54,6 @@
 #include <plat/regs-clock.h>
 #include <plat/regs-gpio.h>
 #include <plat/regs-camif.h>
-#include <plat/s3c64xx-dvfs.h>
 #include <plat/power-clock-domain.h>
 #include <plat/pm.h>
 
@@ -2382,9 +2381,7 @@ int s3c_camif_open(struct file *file)
 		cfg->cis->status &= ~P_NOT_WORKING;
 		up((struct semaphore *) &cfg->cis->lock);
 	}
-#ifdef CONFIG_CPU_FREQ
-	set_dvfs_level(0);
-#endif /* CONFIG_CPU_FREQ */
+
 	err = s3c_cam_exclusive_open();
 	cfg->cis->user++;
 	cfg->status = CAMIF_STOPPED;
@@ -2431,10 +2428,6 @@ int s3c_camif_release(struct file *file)
 	}
 
 	s3c_cam_exclusive_release();
-
-#ifdef CONFIG_CPU_FREQ
-	set_dvfs_level(1);
-#endif /* CONFIG_CPU_FREQ */
 
 	if (cfg->cis->sensor == NULL)
 		DPRINTK("A CIS sensor for MSDMA has been used\n");

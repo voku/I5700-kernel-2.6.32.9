@@ -79,7 +79,6 @@ struct usb_mass_storage_platform_data {
 
 	/* number of LUNS */
 	int nluns;
-	size_t bulk_size;
 };
 
 /* Platform data for USB ethernet driver. */
@@ -88,6 +87,8 @@ struct usb_ether_platform_data {
 	u32	vendorID;
 	const char *vendorDescr;
 };
+
+extern void android_usb_set_connected(int on);
 
 extern void android_register_function(struct android_usb_function *f);
 
