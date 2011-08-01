@@ -25,7 +25,7 @@ loglevel 3
     symlink /sys/kernel/debug /d
 
 # Kernel version
-    setprop ro.build.display.id "VOKU-kernel 2.6.32.9 v0.6"
+    setprop ro.build.display.id "VOKU-kernel 2.6.32.9 v1"
 
 # insert modules
     insmod /lib/modules/xsr.ko
@@ -77,15 +77,7 @@ loglevel 3
 
     mkdir /sd-ext 0771 system system
 
-    write /proc/sys/kernel/panic_on_oops 1
-    write /proc/sys/kernel/hung_task_timeout_secs 0
-    write /proc/cpu/alignment 4
-    write /proc/sys/kernel/sched_latency_ns 10000000
-    write /proc/sys/kernel/sched_min_granularity_ns 4000000
-    write /proc/sys/kernel/sched_wakeup_granularity_ns 4000000
-    write /proc/sys/kernel/sched_features 24188
-    write /proc/sys/kernel/sched_compat_yield 1
-    write /proc/sys/kernel/sched_child_runs_first 1
+    write /proc/sys/kernel/sched_wakeup_granularity_ns 2000000
 
 # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
@@ -338,9 +330,42 @@ on boot
     # Set init its forked children's oom_adj.
     write /proc/1/oom_adj -16
 
-    # Tweak background writeout
+    # Misc kernel tuning
+    write /proc/sys/kernel/printk 4 6 1 4
+
+    # Tweak kernel VM management
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
+    write /proc/sys/vm/oom_kill_allocating_task 1
+    write /proc/sys/vm/vfs_cache_pressure 10
+    write /proc/sys/vm/min_free_kbytes 3072
+
+	#skia optimization of JPEG encoding-decoding and optimization of Dalvik-vm-threshold by spica
+	setprop ro.media.dec.jpeg.memcap 20000000
+	setprop ro.media.enc.jpeg.quality 95,85,70
+	setprop dalvik.vm.lockprof.threshold 500
+
+    # Tweak network parameters
+    write /proc/sys/net/ipv4/tcp_mem 256960 256960 256960
+    write /proc/sys/net/core/wmem_max 404480
+    write /proc/sys/net/core/rmem_max 404480
+    write /proc/sys/net/ipv4/tcp_wmem 4096 16384 404480
+    write /proc/sys/net/ipv4/tcp_rmem 4096 87380 404480
+    write /proc/sys/net/core/rmem_default 256960
+    write /proc/sys/net/core/wmem_default 256960
+    write /proc/sys/net/ipv4/tcp_timestamps 0
+    write /proc/sys/net/ipv4/tcp_tw_reuse 1
+    write /proc/sys/net/ipv4/tcp_sack 1
+    write /proc/sys/net/ipv4/tcp_tw_recycle 1
+    write /proc/sys/net/ipv4/tcp_no_metrics_save 1
+    write /proc/sys/net/ipv4/tcp_window_scaling 1
+    write /proc/sys/net/ipv4/tcp_keepalive_probes 5
+    write /proc/sys/net/ipv4/tcp_keepalive_time 1200
+    write /proc/sys/net/ipv4/tcp_keepalive_intvl 30
+    write /proc/sys/net/ipv4/tcp_fin_timeout 30
+    write /proc/sys/net/ipv4/tcp_congestion_control cubic
+    write /proc/sys/net/ipv4/route/flush 1
+    write /proc/sys/net/core/netdev_max_backlog 2500
 
     # Permissions for System Server and daemons.
 #    chown radio system /sys/android_power/state

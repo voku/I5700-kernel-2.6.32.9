@@ -8,21 +8,35 @@ fi
 Usage()
 {
 echo "build_kernel.sh - building script android kernel"
-echo "  Usage: ./build_kernel.sh "
+echo "  Usage: ./build_kernel.sh <r880 | r880tom3q>"
 echo
 
 exit 1
 }
 
 OPTION=-k
+#PRODUCT=r880
+PRODUCT=$1
 
 case "$PRODUCT" in
-    
-	*)
-		MODULES="g2d g3d mfc vibetonz bcm4325 btgpio camera cmm dpram dpram_recovery jpeg mfc2 multipdp okmfc param pp rfs rotator staryuwlan wl wlan xsr ramzswap"
-                KERNEL_DEF_CONFIG=r880_voku_defconfig
-                ;;
+	r880*)
+        MODULES_FAST="g2d g3d mfc jpeg cmm okmfc rotator"
+        MODULES_STABLE="vibetonz bcm4325 btgpio camera dpram dpram_recovery multipdp param pp rfs wlan xsr compcache"
 
+
+		case "$PRODUCT" in
+			r880)
+				KERNEL_DEF_CONFIG=r880_android_defconfig
+			;;
+			r880tom3q)
+				KERNEL_DEF_CONFIG=r880_tom3q_defconfig
+			;;
+		esac 
+		;;
+		
+	*)
+		Usage
+		;;
 esac 
 
 if [ ! $PWD_DIR ] ; then
@@ -31,7 +45,8 @@ fi
 
 KERNEL_DIR=$PWD_DIR/Kernel
 MODULES_DIR=$PWD_DIR/modules
-CTNG_BIN_DIR=/usr/bin/
+CTNG_BIN_DIR=/opt/ctng/bin
+
 
 prepare_kernel()
 {
@@ -50,27 +65,28 @@ prepare_kernel()
 	fi
 }
 
-build_modules()
+build_modules_stable()
 {
 	echo "*************************************"
-	echo "*           build modules           *"
+	echo "*           build modules | stable  *"
 	echo "*************************************"
 	echo
 
-	make -C $KERNEL_DIR ARCH=arm $KERNEL_DEF_CONFIG	CFLAGS="-Ofast -marm -mfpu=vfp -mtune=rm1176jzf-s"
+	#make -C $KERNEL_DIR ARCH=arm
 	if [ $? != 0 ] ; then
 	    exit 1
 	fi
-	make -C $KERNEL_DIR ARCH=arm KBUILD_MODPOST_WARN=1 modules CFLAGS="-Ofast -marm -mfpu=vfp -mtune=rm1176jzf-s"
+	make -C $KERNEL_DIR ARCH=arm KBUILD_MODPOST_WARN=1 modules
 	if [ $? != 0 ] ; then
 	    exit 1
 	fi
+	#exit 1
 
-	for module in $MODULES
+	for module in $MODULES_STABLE
 	do
 		echo cd $MODULES_DIR/$module
 		cd $MODULES_DIR/$module
-		make KDIR=$KERNEL_DIR CFLAGS="-Ofast -marm -mfpu=vfp -mtune=rm1176jzf-s"
+		make KDIR=$KERNEL_DIR
 		if [ -e ./*.ko ]
 		then
 		    cp ./*.ko  $KERNEL_DIR/../initramfs/lib/modules
@@ -79,22 +95,83 @@ build_modules()
 
 }
 
+build_modules_fast()
+{
+    echo "*************************************"
+    echo "*           build modules | fast    *"
+    echo "*************************************"
+    echo
+
+    #make -C $KERNEL_DIR ARCH=arm
+    if [ $? != 0 ] ; then
+        exit 1
+    fi
+    make -C $KERNEL_DIR ARCH=arm KBUILD_MODPOST_WARN=1 modules CFLAGS="-Ofast \
+                -marm \
+                -march=armv6zk \
+                -mtune=arm1176jzf-s \
+                -mfpu=vfp \
+                -mfloat-abi=softfp \
+                -floop-interchange \
+                -floop-strip-mine \
+                -floop-block \
+                -funsafe-loop-optimizations \
+                -funsafe-math-optimizations \
+                --param l1-cache-size=16 \
+                --param l1-cache-line-size=32 \
+                --param simultaneous-prefetches=6 \
+                --param prefetch-latency=400"
+    if [ $? != 0 ] ; then
+        exit 1
+    fi
+    #exit 1
+
+    for module in $MODULES_FAST 
+    do
+        echo cd $MODULES_DIR/$module
+        cd $MODULES_DIR/$module
+        make KDIR=$KERNEL_DIR CFLAGS="-Ofast \
+                -marm \
+                -march=armv6zk \
+                -mtune=arm1176jzf-s \
+                -mfpu=vfp \
+                -mfloat-abi=softfp \
+                -floop-interchange \
+                -floop-strip-mine \
+                -floop-block \
+                -funsafe-loop-optimizations \
+                -funsafe-math-optimizations \
+                --param l1-cache-size=16 \
+                --param l1-cache-line-size=32 \
+                --param simultaneous-prefetches=6 \
+                --param prefetch-latency=400"
+
+        if [ -e ./*.ko ]
+        then
+            cp ./*.ko  $KERNEL_DIR/../initramfs/lib/modules
+        fi
+    done
+
+}
 
 build_kernel()
 {
 	if [ ! -f $KERNEL_DIR/.config ] ; then
+        echo "kernel config missing, using default"
 		if [ ! -f $KERNEL_DIR/scripts/mod/modprobe ] ; then
 			prepare_kernel
 		fi
 	fi
 
-	#echo "make " -C $KERNEL_DIR ARCH=arm $KERNEL_DEF_CONFIG
-	make -C $KERNEL_DIR ARCH=arm $KERNEL_DEF_CONFIG
+	#echo "make " -C $KERNEL_DIR ARCH=arm
+	#make -C $KERNEL_DIR ARCH=arm 
+
 	if [ $? != 0 ] ; then
 	    exit 1
 	fi
 
-	build_modules
+	build_modules_fast
+    build_modules_stable
 
 	echo "*************************************"
 	echo "*           build kernel            *"
@@ -109,14 +186,24 @@ build_kernel()
 		exit $?
 	fi
 
-	cp $KERNEL_DIR/drivers/net/wireless/bcm4325/dhd.ko   $KERNEL_DIR/../initramfs/lib/modules
-	cp $KERNEL_DIR/net/netfilter/xt_TCPMSS.ko            $KERNEL_DIR/../initramfs/lib/modules
-	cp $KERNEL_DIR/drivers/net/tun.ko                    $KERNEL_DIR/../initramfs/lib/modules
+#
+# 	add some modification for optimize
+#
+#	cp $KERNEL_DIR/drivers/net/wireless/bcm4325/dhd.ko   $KERNEL_DIR/../initramfs/lib/modules
+#	cp $KERNEL_DIR/net/netfilter/xt_TCPMSS.ko            $KERNEL_DIR/../initramfs/lib/modules
+#	cp $KERNEL_DIR/drivers/net/tun.ko                    $KERNEL_DIR/../initramfs/lib/modules
 
-	$CTNG_BIN_DIR/arm-linux-gnueabi-strip -g $KERNEL_DIR/../initramfs/lib/modules/*
+	$CTNG_BIN_DIR/arm-spica-linux-uclibcgnueabi-strip -g $KERNEL_DIR/../initramfs/lib/modules/dpram.ko
+	$CTNG_BIN_DIR/arm-spica-linux-uclibcgnueabi-strip -g $KERNEL_DIR/../initramfs/lib/modules/dhd.ko
+	$CTNG_BIN_DIR/arm-spica-linux-uclibcgnueabi-strip -g $KERNEL_DIR/../initramfs/lib/modules/xt_TCPMSS.ko
+	$CTNG_BIN_DIR/arm-spica-linux-uclibcgnueabi-strip -g $KERNEL_DIR/../initramfs/lib/modules/tun.ko
+#	add old vibrator
+	$CTNG_BIN_DIR/arm-spica-linux-uclibcgnueabi-strip -g $KERNEL_DIR/../initramfs/lib/modules/vibrator.ko
  
 	make
 }
+
+
 
 case "$OPTION" in
 	-k)

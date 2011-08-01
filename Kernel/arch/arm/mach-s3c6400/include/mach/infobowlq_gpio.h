@@ -111,7 +111,7 @@
 #define GPIO_OJ_MOTION_AF			3
 
 
-/*
+
 #define GPIO_WLAN_WAKE				S3C64XX_GPC(6)
 #define GPIO_WLAN_WAKE_AF			1  // output
 
@@ -120,7 +120,7 @@
 
 #define GPIO_WLAN_HOST_WAKE			S3C64XX_GPN(1)
 #define GPIO_WLAN_HOST_WAKE_AF			2
-*/
+
 
 #define GPIO_MIC_SEL_EN_REV04			S3C64XX_GPF(13)
 #define GPIO_MIC_SEL_EN_REV04_AF		1
@@ -128,13 +128,13 @@
 #define GPIO_EAR_MIC_BIAS			S3C64XX_GPK(3)
 #define GPIO_EAR_MIC_BIAS_AF			1
 
-//#define GPIO_CAM_FLASH_SET			S3C64XX_GPH(1)
-//#define GPIO_CAM_FLASH_SET_AF			1
+#define GPIO_CAM_FLASH_SET			S3C64XX_GPH(1)
+#define GPIO_CAM_FLASH_SET_AF			1
 
-//#define GPIO_CAM_FLASH_EN			S3C64XX_GPH(1) //NC
-//#define GPIO_CAM_FLASH_EN_AF			1
+#define GPIO_CAM_FLASH_EN			S3C64XX_GPH(1) //NC
+#define GPIO_CAM_FLASH_EN_AF			1
 
-//#define GPIO_LCD_BL_EN        		S3C64XX_GPH(2)
+//#define GPIO_LCD_BL_EN        			S3C64XX_GPH(2)
 //#define GPIO_LCD_BL_EN_AF         		1
 //#define GPIO_CAM_FLASH_EN			S3C64XX_GPH(2)
 //#define GPIO_CAM_FLASH_EN_AF			1
@@ -147,10 +147,6 @@
 
 #define GPIO_MSENSE_RST_N			S3C64XX_GPM(5)
 #define GPIO_MSENSE_RST_N_AF			1
-
-
-
-
 
 #define GPIO_MSENSE_RST			S3C64XX_GPA(3)
 #define GPIO_MSENSE_RST_AF		1
@@ -375,6 +371,8 @@
 #define GPIO_LCD_G_5_AF			2
 
 /* S3C64XX_GPJ(0) ~ S3C64XX_GPJ(1) */
+#define GPIO_VREG_MSMP_26V		S3C64XX_GPK(15)
+#define GPIO_VREG_MSMP_26V_AF		0
 
 #define GPIO_LCD_R_0			S3C64XX_GPJ(2)
 #define GPIO_LCD_R_0_AF			2
@@ -442,10 +440,13 @@
 #define GPIO_KEYSCAN_3			S3C64XX_GPK(11)
 #define GPIO_KEYSCAN_3_AF		3
 
-/* S3C64XX_GPK(12) ~ S3C64XX_GPK(14) */
+#define GPIO_CAM_CIF_nRST       	S3C64XX_GPK(13)
+#define GPIO_CAM_CIF_nRST_AF   		1
 
-#define GPIO_VREG_MSMP_26V		S3C64XX_GPK(15)
-#define GPIO_VREG_MSMP_26V_AF		0
+#define GPIO_CAM_CIF_nSTBY      	S3C64XX_GPK(14)
+#define GPIO_CAM_CIF_nSTBY_AF  		1
+
+/* S3C64XX_GPK(12) ~ S3C64XX_GPK(14) */
 
 #define GPIO_KEYSENSE_0			S3C64XX_GPL(0)
 #define GPIO_KEYSENSE_0_AF		3

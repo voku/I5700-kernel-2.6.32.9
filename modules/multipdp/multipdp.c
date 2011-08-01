@@ -619,7 +619,7 @@ static int vnet_start_xmit(struct sk_buff *skb, struct net_device *net)
    if (vnet_start_xmit_flag != 0) {
        return NETDEV_TX_BUSY;
    }
-   vnet_start_xmit_flag = 1; 
+	vnet_start_xmit_flag = 1; 
 	workqueue_data = (unsigned long)skb;
 	PREPARE_WORK(&dev->vn_dev.xmit_task,vnet_defer_xmit);
 	schedule_work(&dev->vn_dev.xmit_task);

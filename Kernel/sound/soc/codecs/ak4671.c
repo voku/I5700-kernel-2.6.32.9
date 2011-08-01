@@ -146,7 +146,7 @@ static int proc_write_ttymode(struct file *file, const char *buffer, unsigned lo
     return strnlen(buf, len);
 }
 
-/* Ä¿³Î ÃÊ±âÈ­ ½Ã¿¡ tty_mode¿ë ÇÁ·ÎÆÄÀÏ »ý¼º */
+/* Ã„Â¿Â³ÃŽ ÃƒÃŠÂ±Ã¢ÃˆÂ­ Å“ÃƒÂ¿Â¡ tty_modeÂ¿Ã« Ã‡ÃÂ·ÃŽÃ†Ã„Ã€Ã Â»Ã½Å’Âº */
 static int init_tty_mode_procfs(void)
 {
     int ret = 0;
@@ -186,7 +186,7 @@ static int init_tty_mode_procfs(void)
     return ret;
 }
 
-/* Ä¿³Î Á¾·á½Ã¿¡ tty_mode¿ë ÇÁ·ÎÆÄÀÏ Á¦°Å */
+/* Ã„Â¿Â³ÃŽ ÃÅ¸Â·Ã¡Å“ÃƒÂ¿Â¡ tty_modeÂ¿Ã« Ã‡ÃÂ·ÃŽÃ†Ã„Ã€Ã ÃÅ Â°Ã… */
 static void cleanup_tty_mode_procfs(void)
 {
     remove_proc_entry("tty_mode", tty_procfs_dir);
@@ -223,7 +223,7 @@ static int proc_write_loopback_mode(struct file *file, const char *buffer, unsig
     return strnlen(buf, len);
 }
 
-/*   ÿ tty_mode   */
+/*   Ã¿ tty_mode   */
 static int init_loopback_mode_procfs(void)
 {
     int ret = 0;
@@ -832,15 +832,7 @@ static int ak4671_suspend(struct platform_device *pdev, pm_message_t state)
 		/* AUDIO_EN & MAX8906_AMP_EN Disable */
 		amp_enable(0); /* Board Specific function */
 		audio_power(0); /* Board Specific function */
-#if defined (CONFIG_MACH_MAX)
-//		if(!(gpio_get_value(GPIO_DET_35) ^ 1 && gpio_get_value(GPIO_MONOHEAD_DET_ISR) ^ 0))
-//		if(!(gpio_get_value(GPIO_DET_35) ^ 1))
-        		mic_enable(0);
-//		else if((GPIO_MONOHEAD_DET_ISR) ^ 0)
-//        		mic_enable(0);		
-#else		
-		    mic_enable(0); /* MICBIAS Disable (SPH-M900 Only) */
-#endif	
+		//mic_enable(0); /* MICBIAS Disable (SPH-M900 Only) */
 		ak4671_power = 0;
 		ak4671_idle_mode = IDLE_POWER_DOWN_MODE_ON;
 	}
@@ -894,7 +886,7 @@ static int ak4671_init(struct snd_soc_device *socdev)
 
     init_tty_mode_procfs();
     init_loopback_mode_procfs();
-
+    
 	if (codec->reg_cache == NULL)
 		return -ENOMEM;
 
@@ -1114,8 +1106,6 @@ static int ak4671_i2c_probe(struct i2c_client *client,
 	struct snd_soc_codec *codec = socdev->card->codec;
 	int ret;
 
-	printk("%s called\n", __func__);
-
 	ak4671_client = client;
 	i2c_set_clientdata(client, ak4671_client);
 	codec->control_data = client;
@@ -1151,7 +1141,6 @@ err:
 
 static int ak4671_i2c_remove(struct i2c_client *client)
 {
-	printk("%s called\n", __func__);
 	ak4671_client = i2c_get_clientdata(client);
 	kfree(ak4671_client);
 
@@ -1244,7 +1233,6 @@ static int ak4671_remove(struct platform_device *pdev)
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->card->codec;
 
-	printk("%s called\n", __func__);
 	if (codec->control_data)
 		ak4671_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
@@ -1285,7 +1273,6 @@ static int __init ak4671_codec_init(void)
 	return snd_soc_register_dai(&ak4671_dai);	
 }
 module_init(ak4671_codec_init);
-//late_initcall(ak4671_codec_init);
 
 static void __exit ak4671_codec_exit(void)
 {

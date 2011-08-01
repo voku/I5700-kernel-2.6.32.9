@@ -1,7 +1,7 @@
 /*
  * Automatically generated C config: don't edit
  * Linux kernel version: 2.6.32.9
- * Sat Jun 25 15:58:43 2011
+ * Sun Jul 31 18:54:22 2011
  */
 #define AUTOCONF_INCLUDED
 #define CONFIG_MMC_SDHCI_S3C_DMA 1
@@ -59,7 +59,6 @@
 #define CONFIG_CPU_TLB_V6 1
 #define CONFIG_PPP_FILTER 1
 #define CONFIG_COMPASS 1
-#define CONFIG_RCU_FANOUT 32
 #define CONFIG_BLK_DEV 1
 #define CONFIG_TOUCHSCREEN_QT5480 1
 #define CONFIG_NF_CONNTRACK_IPV4 1
@@ -299,7 +298,6 @@
 #define CONFIG_SND_PCM_OSS 1
 #define CONFIG_INPUT_MOUSE 1
 #define CONFIG_NET_IPIP 1
-#define CONFIG_TREE_RCU 1
 #define CONFIG_SHMEM 1
 #define CONFIG_INET_XFRM_MODE_TRANSPORT 1
 #define CONFIG_EPOLL 1
@@ -343,6 +341,7 @@
 #define CONFIG_HAS_WAKELOCK 1
 #define CONFIG_FUTEX 1
 #define CONFIG_IP_NF_MATCH_ECN 1
+#define CONFIG_TINY_RCU 1
 #define CONFIG_MISC_DEVICES 1
 #define CONFIG_BT_HCIBTSDIO 1
 #define CONFIG_CPU_CP15_MMU 1

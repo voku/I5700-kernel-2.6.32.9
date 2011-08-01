@@ -29,6 +29,8 @@
 #include <linux/delay.h>
 #include <linux/leds.h>
 #include <linux/bootmem.h>
+#include <linux/spi/spi.h>
+#include <linux/spi/spi_gpio.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -64,6 +66,7 @@
 #include <plat/pm.h>
 
 #include <mach/gpio.h>
+#include <mach/infobowlq_gpio.h>
 #include <mach/gpio-core.h>
 
 #include <plat/gpio-cfg.h>
@@ -314,6 +317,7 @@ static struct platform_device *infobowlq_devices[] __initdata = {
 	&s3c_device_dma2,
 	&s3c_device_dma3,
 #endif
+	&s3c_device_keypad,  
 	&s3c_device_hsmmc0,
 	&s3c_device_hsmmc2,
 	&s3c_device_i2c0,
@@ -1276,6 +1280,12 @@ void s3c_config_wakeup_source(void)
 {
 	unsigned int eint0pend_val;
 
+	/* Power key (GPN5) */
+	  s3c_gpio_cfgpin(S3C64XX_GPN(5), S3C64XX_GPN5_EINT5);
+	  s3c_gpio_setpull(S3C64XX_GPN(5), S3C_GPIO_PULL_NONE);
+	  __raw_writel((__raw_readl(S3C64XX_EINT0CON0) & ~(0x7 << 8)) |
+	  (S3C64XX_EXTINT_BOTHEDGE << 8), S3C64XX_EINT0CON0);
+
 	/* Wake-up source 
 	 * ONEDRAM_INT(EINT0), Power key(EINT5), WLAN_HOST_WAKE(EINT1), 
 	 * DET_3.5(EINT10), EAR_SEND_END(EINT11), SIM_nDETECT(EINT4), T_FLASH_DETECT(EINT6)
@@ -1290,6 +1300,7 @@ void s3c_config_wakeup_source(void)
 	eint0pend_val= __raw_readl(S3C64XX_EINT0PEND);
 	eint0pend_val |= (0x1 << 25) | (0x1 << 22) | (0x1 << 19) |
 		(0x1 << 17) | (0x1 << 11) | (0x1 << 10) | (0x1 << 9)| (0x1 << 6) |(0x1 << 5) | (0x1 << 4) |(0x1 << 1) | 0x1;
+eint0pend_val |= (0x1 << 7);
 	__raw_writel(eint0pend_val, S3C64XX_EINT0PEND);
 
 	eint0pend_val = (0x1 << 25) | (0x1 << 22) | (0x1 << 19) |
@@ -1300,6 +1311,7 @@ void s3c_config_wakeup_source(void)
 	eint0pend_val= __raw_readl(S3C64XX_EINT0PEND);
 	eint0pend_val |= (0x1 << 25) | (0x1 << 22) | (0x1 << 19) |
 		(0x1 << 17) | (0x1 << 11) | (0x1 << 10) | (0x1 << 9)| (0x1 << 6) |(0x1 << 5) | (0x1 << 4) | (0x1 << 1) | 0x1;
+eint0pend_val |= (0x1 << 7);
 	__raw_writel(eint0pend_val, S3C64XX_EINT0PEND);
 
 	eint0pend_val = (0x1 << 25) | (0x1 << 22) | (0x1 << 19) |

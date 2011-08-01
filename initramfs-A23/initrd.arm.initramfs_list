@@ -17,7 +17,7 @@ file /lib/modules/rfs.ko 				../initramfs/lib/modules/rfs.ko 0644 0 0
 #file /lib/modules/s3c_cmm.ko 			../initramfs/lib/modules/s3c_cmm.ko 0644 0 0
 #file /lib/modules/s3c_camera.ko 		../initramfs/lib/modules/s3c_camera.ko 0644 0 0
 file /lib/modules/dpram.ko 				../initramfs/lib/modules/dpram.ko 0644 0 0
-file /lib/modules/s3c_rotator.ko 		../initramfs/lib/modules/s3c_rotator.ko 0644 0 0
+#file /lib/modules/s3c_rotator.ko 		../initramfs/lib/modules/s3c_rotator.ko 0644 0 0
 file /lib/modules/xsr_stl.ko 			../initramfs/lib/modules/xsr_stl.ko 0644 0 0
 file /lib/modules/s3c_jpeg.ko 			../initramfs/lib/modules/s3c_jpeg.ko 0644 0 0
 file /lib/modules/s3c_g2d_driver.ko 	../initramfs/lib/modules/s3c_g2d_driver.ko 0644 0 0

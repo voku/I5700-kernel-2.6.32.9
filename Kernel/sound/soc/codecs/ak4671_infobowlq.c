@@ -70,10 +70,10 @@ static int max9877_read(struct i2c_client *client, u8 reg, u8 *data)
 	u8 buf[1];
 	struct i2c_msg msg[2];
 
-	if( client == NULL ) {
-		printk("%s() : client is NULL !!!\n", __func__);
-		return -EIO;
-	}
+//	if( client == NULL ) {
+//		printk("%s() : client is NULL !!!\n", __func__);
+//		return -EIO;
+//	}
 	
 	buf[0] = reg; 
 
@@ -102,10 +102,10 @@ static int max9877_write(struct i2c_client *client, u8 reg, u8 data)
 	u8 buf[2];
 	struct i2c_msg msg[1];
 
-	if( client == NULL ) {
-		printk("%s() : client is NULL !!!\n", __func__);
-		return -EIO;
-	}
+//	if( client == NULL ) {
+//		printk("%s() : client is NULL !!!\n", __func__);
+//		return -EIO;
+//	}
 	
 	buf[0] = reg;
 	buf[1] = data;
@@ -128,7 +128,7 @@ static int max9877_i2c_probe(struct i2c_client *client,
 	u8 pData = 0, i;
 
 	FI
-	printk("%s() called\n", __func__);
+	//printk("%s() called\n", __func__);
 	max9877_i2c_client = client;
 	i2c_set_clientdata(client, max9877_i2c_client);
 
@@ -155,7 +155,7 @@ static int max9877_i2c_probe(struct i2c_client *client,
 static int max9877_i2c_remove(struct i2c_client *client)
 {
    	FI
-	printk("%s() called\n", __func__);
+//	printk("%s() called\n", __func__);
 	max9877_i2c_client = i2c_get_clientdata(client);
 	kfree(max9877_i2c_client);
 
@@ -243,7 +243,7 @@ int audio_power(int en)
 	else
 		gpio_set_value(GPIO_AUDIO_EN, 0);
 
-	mic_enable(1); 
+//	mic_enable(1); 
 
 	return 0;
 }
@@ -489,11 +489,27 @@ static void set_bias (struct snd_soc_codec *codec, int mode)
 		(mode & 0x0f) == MM_AUDIO_PLAYBACK_RING_SPK_HP ||
 		(mode & 0x0f) == MM_AUDIO_PLAYBACK_SPK_HP) /* for earjack send/end key interrupt */
 	{
+
+		if( mode== MM_AUDIO_VOICECALL_RCV || 
+		    mode == MM_AUDIO_VOICEMEMO_MAIN || 
+		    mode == MM_AUDIO_VOICEMEMO_SUB) 
+		{
+			P("Main Mic");
+			mic_set_path(AK4671_MIC_PATH_MAIN);
+		} 
+		else if ( mode== MM_AUDIO_VOICECALL_SPK ) 
+		{
+			P("Sub Mic");
+			mic_set_path(AK4671_MIC_PATH_SUB);
+		}
+
+		mic_enable(1);
+
 		if (((mode & 0x0f) == MM_AUDIO_OUT_HP) ||
 			((mode & 0x0f) == MM_AUDIO_PLAYBACK_RING_SPK_HP) ||
 			((mode & 0x0f) == MM_AUDIO_PLAYBACK_SPK_HP) ) 
 		{
-			mic_ear_enable(1);
+			mic_ear_enable(0);
 		} 
 	}
 	else
@@ -589,7 +605,7 @@ static void set_codec_gain(struct snd_soc_codec *codec, int mode)
 			codec->write(codec, 0x08, 0xB5); 	// Output Volume Control : OUT2[7:4]/OUT1[2:0]
 			codec->write(codec, 0x1A, 0x20); 	// Lch Output Digital Vol
 			codec->write(codec, 0x1B, 0x20); 	// Rch Output Digital Vol
-			codec->write(codec, 0x05, 0x55); 	// MIC-AMP Gain=0dB
+			codec->write(codec, 0x05, 0x53); 	// MIC-AMP Gain=0dB
 			codec->write(codec, 0x12, 0x91); 	// Lch Input Volume : 0dB
 			codec->write(codec, 0x13, 0x91); 	// Rch Input Volume : 0dB 
 			break;
@@ -631,13 +647,13 @@ static void set_codec_gain(struct snd_soc_codec *codec, int mode)
 		case MM_AUDIO_VOICEMEMO_MAIN:
 			if(sample_rate == 8000)
 			{
-				codec->write(codec, 0x05, 0xCC); 		// MIC-AMP Gain=+27dB ->15dB
-				codec->write(codec, 0x12, 0xB9); 		// Lch Input Volume : 6dB -> 17.25dB
-				codec->write(codec, 0x13, 0xB9); 		// Rch Input Volume : 6dB -> 17.25dB
+				codec->write(codec, 0x05, 0xBB); 		// MIC-AMP Gain=+27dB ->15dB
+				codec->write(codec, 0x12, 0xBE); 		// Lch Input Volume : 6dB -> 17.25dB
+				codec->write(codec, 0x13, 0xBE); 		// Rch Input Volume : 6dB -> 17.25dB
 			}
 			else
 			{
-				codec->write(codec, 0x05, 0xBB); 		// MIC-AMP Gain = +27dB->21dB Request from Nuance CI12
+				codec->write(codec, 0x05, 0xCC); 		// MIC-AMP Gain = +27dB->21dB Request from Nuance CI12
 				codec->write(codec, 0x12, 0x91); 		// Lch Input Volume : 0dB
 				codec->write(codec, 0x13, 0x91); 		// Rch Input Volume : 0dB 
 			}
@@ -645,7 +661,7 @@ static void set_codec_gain(struct snd_soc_codec *codec, int mode)
 		case MM_AUDIO_VOICEMEMO_SUB:
 			if(sample_rate == 8000)
 			{
-				codec->write(codec, 0x05, 0xBB); 		// MIC-AMP Gain=+27dB ->15dB
+				codec->write(codec, 0x05, 0xBC); 		// MIC-AMP Gain=+27dB ->15dB
 				codec->write(codec, 0x12, 0xB9); 		// Lch Input Volume : 6dB -> 17.25dB
 				codec->write(codec, 0x13, 0xB9); 		// Rch Input Volume : 6dB -> 17.25dB
 			}
@@ -654,8 +670,8 @@ static void set_codec_gain(struct snd_soc_codec *codec, int mode)
 			      if(ak4671->recognition_active == REC_ON)  //HYH_20100709
 				{
 					codec->write(codec, 0x05, 0xCC); 		// MIC-AMP Gain = +27dB->21dB Request from Nuance CI12
-					codec->write(codec, 0x12, 0x93); 		// Lch Input Volume : 0dB For ASR +5dB 0701    9B->93
-					codec->write(codec, 0x13, 0x93); 		// Rch Input Volume : 0dB					   9B->93
+					codec->write(codec, 0x12, 0x9B); 		// Lch Input Volume : 0dB For ASR +5dB 0701    9B->93
+					codec->write(codec, 0x13, 0x9B); 		// Rch Input Volume : 0dB					   9B->93
 				}
 				else
 				{
@@ -681,7 +697,18 @@ static void set_codec_gain(struct snd_soc_codec *codec, int mode)
 			break;
 		case MM_AUDIO_VOICEMEMO_BT :
 			break;
+case MM_AUDIO_FMRADIO_SPK:			
+			codec->write(codec, 0x08, 0xB5); 	// Output Volume Control : OUT2[7:4] = 0dB /OUT1[2:0] = 0dB
+			codec->write(codec, 0x1A, 0x18); 	// Lch Output Digital Vol : 0dB
+			codec->write(codec, 0x1B, 0x18); 	// Rch Output Digital Vol : 0dB
+			break;
 
+  		case MM_AUDIO_FMRADIO_HP:
+			codec->write(codec, 0x08, 0xD5); 	// 0xB5(0dB) -> 0xD5(6dB) Output Volume Control : OUT2[7:4] = 0dB /OUT1[2:0] = 0dB
+			codec->write(codec, 0x1A, 0x18); 	// Lch Output Digital Vol : 0dB
+			codec->write(codec, 0x1B, 0x18); 	// Rch Output Digital Vol : 0dB
+			break;
+                
 		default :
 			printk("[%s] Invalid gain path\n", __func__);
 	}
@@ -842,15 +869,23 @@ int path_change(struct snd_soc_codec *codec, int to_mode, int from_mode)
 					mic_set_path(AK4671_MIC_PATH_MAIN);
 					set_codec_gain(codec, to_mode);
 					codec->write(codec, 0x04, 0x14); 		// => MIC-AMP Lch=IN1+/-
-					codec->write(codec, 0x00, 0xD5); 		// D/A power-up
+					codec->write(codec, 0x00, 0xD5);
+mic_enable(1); 		// D/A power-up
 					break;
 				case MM_AUDIO_VOICEMEMO_EAR :
+if (1)
+{
 					P("VOICEMEMO_EAR->VOICEMEMO_SUB");
 					mic_set_path(AK4671_MIC_PATH_MAIN);
 					set_codec_gain(codec, to_mode);
 					codec->write(codec, 0x04, 0x14); 		// => MIC-AMP Lch=IN1+/-
 					mic_ear_enable(0);
 					amp_set_path(AK4671_AMP_PATH_SPK);
+}
+else
+{ 
+mic_enable(1);
+}
 					break;
 
 				default :
@@ -1052,7 +1087,7 @@ int path_enable(struct snd_soc_codec *codec, int mode)
 
 		case MM_AUDIO_VOICECALL_BT :
 			P("set MM_AUDIO_VOICECALL_BT");
-			codec->write(codec, 0x59, 0x10); 		// => SDTO Lch=SRC-B
+			//codec->write(codec, 0x59, 0x10); 		// => SDTO Lch=SRC-B
 			codec->write(codec, 0x01, 0xF8); 		// fs=44.1kHz, MCKI=19.2MHz input
 
 			codec->write(codec, 0x11, 0xA0); 		// LOP/LON, gain=0dB
@@ -1131,6 +1166,107 @@ int path_enable(struct snd_soc_codec *codec, int mode)
 													// PCM reference= BICKA(VCOCBT=10kohm&4.7nF)
 			mdelay(40); 		// Lock time= 40ms
 			break;
+		case MM_AUDIO_FMRADIO_RCV :
+			P("set MM_AUDIO_FMRADIO_RCV");
+			codec->write(codec, 0x09, 0x04);	// => LOUT1= LIN2
+			codec->write(codec, 0x0A, 0x04);	// => ROUT1= RIN2
+			codec->write(codec, 0x08, 0xB5);	// => gain=0dB(default)
+			codec->write(codec, 0x00, 0x01);	// => VCOM power-up
+			mdelay(2);							// Wait more than 100ns
+			codec->write(codec, 0x07, 0x0C);	// => PMAINL2, PMAINR2 power-up
+			codec->write(codec, 0x0F, 0x04);	// => LOPS1=1
+			mdelay(2);							// Wait more than 100ns
+			codec->write(codec, 0x0F, 0x07);	// => PMLO1, PMRO1 power-up
+			mdelay(310);						// Wait more than 300ms 
+												// (Output capacitor=1uF, AVDD=3.3V)
+			codec->write(codec, 0x0F, 0x03);	// => LOPS1=0
+			codec->write(codec, 0x0F, 0x23);	// LOPS1='0', RCV mono
+
+                   /* RIN2(FM_ROUT) Rch + DAC(A/P) Rch => RCP/RCN */
+			codec->write(codec, 0x00, 0x81);	// DAC-Rch power-up
+			mdelay(2);
+			codec->write(codec, 0x0A, 0x05);	// (FM_ROUT mixing DAC-Rch) to RCP/RCN
+			break;
+
+		case MM_AUDIO_FMRADIO_SPK :
+		case MM_AUDIO_FMRADIO_HP :
+		case MM_AUDIO_FMRADIO_SPK_HP : 		            
+			P("set MM_AUDIO_FMRADIO_SPK, HP, SPK_HP");
+
+#if 0 // for FM radio recording
+			/* FM Radio -> LOUT2/ROUT2 */
+			codec->write(codec, 0x0B, 0x04);	// => LOUT2= LIN2
+			codec->write(codec, 0x0C, 0x04);	// => ROUT2= RIN2
+			// codec->write(codec, 0x08, 0xD5);	// => L1OUT/R1OUT = 0dB, L2/R2 gain=0dB -> 6dB
+			codec->write(codec, 0x07, 0x0C);	// => PMAINL2, PMAINR2 = 1
+			codec->write(codec, 0x00, 0x01);	// => VCOM power-up
+			mdelay(2);							// Wait more than 100ns
+			codec->write(codec, 0x10, 0x63);	// => PMLO2, PMRO2, PMLO2S, PMRO2S = 1
+			mdelay(2);							// Wait more than 100ns
+			codec->write(codec, 0x10, 0x67);	// => MUTEN=1
+
+			mdelay(2);							// Wait more than 100ns
+			/* MIC-AMP-Lch -> ADC Lch/Rch -> AP Lch/Rch */
+			codec->write(codec, 0x02, 0x26);	// MCKO out, BCKO=64fs, PLL master mode
+			codec->write(codec, 0x04, 0x05); 	// MIC-AMP Lch:LIN2, Rch:RIN2
+			codec->write(codec, 0x01, 0xF8);	// fs=44.1kHz, MCKI=19.2MHz input
+			codec->write(codec, 0x02, 0x27);	// PLL power-up
+			mdelay(40);
+			codec->write(codec, 0x00, 0x3D);	// ADC power-up
+			mdelay(24);
+
+                    	/* FM Radio + DAC => Lout2/Rout2 */
+			codec->write(codec, 0x00, 0xC1);	// DAC-Rch power-up
+			mdelay(2);
+			codec->write(codec, 0x0B, 0x05);	// (FM_LOUT mixing DAC-Lch) to Lout2
+			codec->write(codec, 0x0C, 0x05);	// (FM_ROUT mixing DAC-Rch) to Rout2
+#else
+			/* FM Radio Path Setting */
+			codec->write(codec, 0x0B, 0x20);	// MIC-AMP Lch => LOUT2
+			codec->write(codec, 0x0C, 0x20);	// MIC-AMP Rch => ROUT2
+
+		  	codec->write(codec, 0x04, 0x05); 	// MDIF2[5] = 0 , [3:0] = 0x5 
+			// codec->write(codec, 0x08, 0xB5);	// => gain=0dB(default)
+			codec->write(codec, 0x07, 0x0C);	// => PMAINL2, PMAINR2 = 1
+			codec->write(codec, 0x00, 0x01);	// => VCOM power-up
+			mdelay(2);							// Wait more than 100ns
+			codec->write(codec, 0x00, 0x0D);	// => MIC-AMP
+			codec->write(codec, 0x06, 0x03);	// => PMLOOPL,PMLOOPR power-up
+			codec->write(codec, 0x10, 0x63);	// => PMLO2, PMRO2, PMLO2S, PMRO2S = 1
+			mdelay(2);							// Wait more than 100ns
+			codec->write(codec, 0x10, 0x67);	// => MUTEN=1
+
+			/* FM Radio Recording */
+			codec->write(codec, 0x01, 0xF8);	// Fs = 44.1kHz, MCKI=19.2MHz input
+			// codec->write(codec, 0x05, 0x55);	// MIC-AMP Lch/Rch Gain = 0dB
+			// ALC Setting
+			codec->write(codec, 0x16, 0x05);	// WTM[2:0] = 1(5.8ms) , [ZTM[1:0] = 1(3.8ms)
+			codec->write(codec, 0x14, 0xE1);	// +30dB
+			codec->write(codec, 0x17, 0x01);	// LMTH[1:0] = 1 
+			codec->write(codec, 0x18, 0x03);	// ALC Enable
+			codec->write(codec, 0x00, 0x3D);	// => MIC-AMP + A/D power-up
+		
+			/* AP Path Setting */	
+			/* FM Radio + DAC => LOUT2/ROUT2  */
+			codec->write(codec, 0x00, 0xFD); 	// => MIC-AMP + ADC Lch/Rch power-up + DAC Rch/Lch power-up
+			codec->write(codec, 0x0B, 0x21);	// => MIC_AMP Lch + DAC Lch => LOUT2
+			codec->write(codec, 0x0C, 0x21); 	// => MIC_AMP Rch + DAC Rch => ROUT2
+#endif
+
+			break;
+
+		case MM_AUDIO_FMRADIO_BT :
+			P("set MM_AUDIO_FMRADIO_BT");
+			codec->write(codec, 0x04, 0x24);	// => MIC-AMP Rch=IN2+/-
+			codec->write(codec, 0x19, 0x41);	// => SRC-A= MIX Rch
+			codec->write(codec, 0x15, 0x04);	// => 5-band EQ Rch=SVOLA Rch
+			codec->write(codec, 0x00, 0x01);	// => VCOM power-up
+			mdelay(2); 							// Wait more than 100ns
+			codec->write(codec, 0x00, 0x39);	// => A/D, MIC-AMP Rch power-up
+			codec->write(codec, 0x53, 0x00);	// => PMPCM, PMSRA, PMSRB= ¡°1¡±,
+												// PCM reference= BICKA(if VCOCBT=10kohm & 4.7nF)
+			mdelay(40); 						// Lock time= 40ms
+
 
 		default :
 			printk("[SOUND MODE] invalid mode!!! \n");
@@ -1251,7 +1387,7 @@ int path_disable(struct snd_soc_codec *codec, int mode)
 
 		case MM_AUDIO_VOICECALL_BT :
 			P("set MM_AUDIO_VOICECALL_BT Off");
-			codec->write(codec, 0x59, 0x00); 
+			//codec->write(codec, 0x59, 0x00); 
 			/* Mixing ADC Rch and A/P Rch Off */
 			codec->write(codec, 0x15, 0x14); 	// 5-band-EQ-Lch: from SRC-B;
 												// Rch: from SVOLA Rch

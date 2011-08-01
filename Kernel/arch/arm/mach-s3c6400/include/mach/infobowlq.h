@@ -28,6 +28,7 @@
 #else
 #error	"Board revision is not defined!"
 #endif
+#define CONFIG_CLK_666_133_66
 
 #include "infobowlq_gpio.h"
 
@@ -111,29 +112,28 @@
 				Set_MAX8698_PM_REG(ELDO6, 0);  \
 		}  \
 }	while (0)
-#define	LCD_28V_OFF do {  \
-		if (Get_MAX8698_PM_REG(ELDO7, &onoff_lcd_28)) {  \
-			pr_info("%s: LCD 2.8V off(%d)\n", __func__, onoff_lcd_28);  \
-			if (onoff_lcd_28) \
+#define	LCD_28V_OFF do {} while (0)
+#define	LCD_30V_OFF do {  \
+		if (Get_MAX8698_PM_REG(ELDO7, &onoff_lcd_30)) {  \
+			pr_info("%s: LCD 3.0V off(%d)\n", __func__, onoff_lcd_30);  \
+			if (onoff_lcd_30) \
 				Set_MAX8698_PM_REG(ELDO7, 0);  \
 		}  \
-}	while (0)
-#define	LCD_30V_OFF do {}	while (0)
+	}	while (0)
 
 #define	LCD_18V_ON do {  \
-		if (onoff_lcd_18) {  \
+		if (!onoff_lcd_18) {  \
 			pr_info("%s: LCD 1.8V On\n", __func__);  \
 			Set_MAX8698_PM_REG(ELDO6, 1);  \
 		}  \
 }	while (0)
-#define	LCD_28V_ON do {  \
-		if (onoff_lcd_28) {  \
-		pr_info("%s: LCD 2.8V On\n", __func__);  \
+#define	LCD_28V_ON do {} while (0)
+
+#define	LCD_30V_ON do {  \
+		if (!onoff_lcd_30) {  \
+		pr_info("%s: LCD 3.0V On\n", __func__);  \
 		Set_MAX8698_PM_REG(ELDO7, 1);  \
 	}  \
-}while (0)
-
-#define	LCD_30V_ON do {}	while (0)
+}	while (0)
 
 #endif	/* ASM_MACH_INSTINCTQ_H */
-
